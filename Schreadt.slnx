@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Example-Game/Example-Game.csproj" />
+  <Project Path="Schreadt-Engine/Schreadt-Engine.csproj" />
+</Solution>

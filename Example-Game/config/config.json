@@ -1,0 +1,13 @@
+{
+  "window": {
+    "title": "Example Game",
+    "default-size": {
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "assetLibraries": [
+    "default",
+    "test"
+  ]
+}
