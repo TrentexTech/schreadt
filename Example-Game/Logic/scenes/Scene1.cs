@@ -1,4 +1,5 @@
 using Example_Game.Logic;
+using Schreadt_Engine.Collision;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Component.PreFab;
 using Schreadt_Engine.Core;
@@ -28,6 +29,11 @@ public class Scene1 : SceneLogic
 
         Scene.AddChild(player);
         Scene.AddChild(landmark);
+        Scene.Collisions.AddCollider(new CircleCollider2D(player, player.Radius)
+        {
+            BodyType = CollisionBodyType2D.Dynamic
+        });
+        Scene.Collisions.AddCollider(new CircleCollider2D(landmark, landmark.Radius));
 
         State.CurrentReality.MainCamera.InitLogic(new FollowTargetCameraLogic(player));
     }

@@ -1,3 +1,4 @@
+using Schreadt_Engine.Collision;
 using Schreadt_Engine.Component.Logic;
 
 namespace Schreadt_Engine.Component;
@@ -8,6 +9,7 @@ public class Scene : GameObject
 
     public string Name { get; }
     public SceneLogic Logic { get; }
+    public CollisionWorld2D Collisions { get; } = new();
 
     internal Scene(string name, SceneLogic logic)
     {
@@ -31,6 +33,7 @@ public class Scene : GameObject
         if (_unloaded) return;
 
         Logic.Unload();
+        Collisions.Clear();
         _unloaded = true;
     }
 }
