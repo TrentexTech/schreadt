@@ -7,14 +7,16 @@ public class Reality : IUpdateable
 {
     private bool _initialized;
 
-    public GameLogic? GameLogic;
+    public GameLogic? GameLogic { get; }
     public Scene Scene;
     public Camera MainCamera { get; private set; }
 
     public Camera Camera => MainCamera;
 
-    internal Reality()
+    internal Reality(GameLogic? gameLogic)
     {
+        GameLogic = gameLogic;
+        GameLogic?.Attach(this);
         MainCamera = new Camera();
         Scene = new Scene(0);
     }
