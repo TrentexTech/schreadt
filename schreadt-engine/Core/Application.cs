@@ -1,19 +1,25 @@
 using Schreadt_Engine.Component.Logic;
+using Schreadt_Engine.Gui;
 
 namespace Schreadt_Engine.Core;
 
 internal class Application
 {
     private readonly FixedStepClock _physicsClock = new();
+    private readonly PerformanceOverlay _performanceOverlay;
 
     internal readonly Window Window;
     internal readonly InputManager Input;
     internal readonly Reality Reality;
+    internal readonly GuiSystem Gui;
 
     internal Application(GameLogic? gameLogic)
     {
         Input = new InputManager();
         State.SetInput(Input);
+        Gui = new GuiSystem();
+        State.SetGui(Gui);
+        _performanceOverlay = new PerformanceOverlay(Gui);
         Reality = new Reality(gameLogic);
         State.SetCurrentReality(Reality);
         Window = new Window(this);
@@ -50,9 +56,10 @@ internal class Application
         }
     }
 
-    internal void Render(Renderer renderer)
+    internal void Render(Renderer renderer, double frameTime)
     {
-        Reality.Render(renderer);
+        _performanceOverlay.Update(frameTime);
+        Reality.Render(renderer, Gui);
     }
 
     internal void Shutdown()

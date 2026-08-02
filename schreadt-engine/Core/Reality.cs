@@ -1,5 +1,6 @@
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
+using Schreadt_Engine.Gui;
 
 namespace Schreadt_Engine.Core;
 
@@ -51,9 +52,9 @@ public class Reality : IUpdateable
         MainCamera.Update(dt);
     }
 
-    public void Render(Renderer renderer)
+    public void Render(Renderer renderer, GuiSystem? gui = null)
     {
-        renderer.Render(MainCamera, Scene);
+        renderer.Render(MainCamera, Scene, gui);
     }
 
     internal void Shutdown()

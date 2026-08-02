@@ -57,7 +57,7 @@ public class Window
 
     private void OnRender(double dt)
     {
-        if (_renderer is not null) _app.Render(_renderer);
+        if (_renderer is not null) _app.Render(_renderer, dt);
     }
 
     private void OnFramebufferResize(Vector2D<int> size)

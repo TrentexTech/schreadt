@@ -2,7 +2,7 @@ namespace Schreadt_Engine.Core;
 
 internal sealed class FixedStepClock
 {
-    internal const double FixedDeltaTime = 1.0 / 60.0;
+    internal const double FixedDeltaTime = 1.0 / 144.0;
     internal const double MaximumFrameDeltaTime = 0.25;
     internal const int MaximumStepsPerFrame = 8;
 

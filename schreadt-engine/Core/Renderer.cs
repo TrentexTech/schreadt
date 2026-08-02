@@ -1,4 +1,5 @@
 using Schreadt_Engine.Component;
+using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 
@@ -70,7 +71,7 @@ public sealed class Renderer : IDisposable
         _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
     }
 
-    public void Render(Camera camera, GameObject obj)
+    public void Render(Camera camera, GameObject obj, GuiSystem? gui = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(camera);
@@ -84,6 +85,7 @@ public sealed class Renderer : IDisposable
             _gl.Clear(ClearBufferMask.ColorBufferBit);
             if (obj is Scene { Background.Enabled: true } scene) DrawGrid(scene.Background);
             obj.Render(this);
+            gui?.Render(this);
         }
         finally
         {
@@ -117,6 +119,64 @@ public sealed class Renderer : IDisposable
         _gl.BindVertexArray(_circleVertexArray);
         _gl.DrawArrays(PrimitiveType.TriangleFan, 0, (uint)_circleVertexCount);
         _gl.BindVertexArray(0);
+    }
+
+    internal void DrawGuiLabel(GuiLabel label)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(label);
+        if (!_renderingFrame) throw new InvalidOperationException("GUI drawing must occur while rendering a frame.");
+
+        var lines = label.Text.Replace("\r", string.Empty).Split('\n');
+        var longestLine = lines.Max(line => line.Length);
+        var textWidth = Math.Max(0.0f, (longestLine * BitmapFont5x7.CharacterAdvance - 1) * label.Scale);
+        var textHeight = Math.Max(0.0f, (lines.Length * BitmapFont5x7.LineAdvance - 1) * label.Scale);
+        var textX = label.Position.X + label.Padding;
+        var textY = label.Position.Y + label.Padding;
+
+        if (label.BackgroundColor.W > 0)
+        {
+            var backgroundVertices = new List<float>(12);
+            AddScreenQuad(
+                backgroundVertices,
+                label.Position.X,
+                label.Position.Y,
+                textWidth + label.Padding * 2.0f,
+                textHeight + label.Padding * 2.0f);
+            DrawDynamicBatch(backgroundVertices, label.BackgroundColor, PrimitiveType.Triangles);
+        }
+
+        var glyphVertices = new List<float>();
+
+        for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        {
+            var line = lines[lineIndex];
+
+            for (var characterIndex = 0; characterIndex < line.Length; characterIndex++)
+            {
+                var glyph = BitmapFont5x7.GetGlyph(line[characterIndex]);
+                var glyphX = textX + characterIndex * BitmapFont5x7.CharacterAdvance * label.Scale;
+                var glyphY = textY + lineIndex * BitmapFont5x7.LineAdvance * label.Scale;
+
+                for (var row = 0; row < BitmapFont5x7.GlyphHeight; row++)
+                {
+                    for (var column = 0; column < BitmapFont5x7.GlyphWidth; column++)
+                    {
+                        var bit = 1 << (BitmapFont5x7.GlyphWidth - column - 1);
+                        if ((glyph[row] & bit) == 0) continue;
+
+                        AddScreenQuad(
+                            glyphVertices,
+                            glyphX + column * label.Scale,
+                            glyphY + row * label.Scale,
+                            label.Scale,
+                            label.Scale);
+                    }
+                }
+            }
+        }
+
+        DrawDynamicBatch(glyphVertices, label.Color, PrimitiveType.Triangles);
     }
 
     public void Dispose()
@@ -257,7 +317,39 @@ public sealed class Renderer : IDisposable
         vertices.Add((float)projectedEnd.Y);
     }
 
-    private unsafe void DrawLineBatch(List<float> vertices, Vector4D<float> color)
+    private void DrawLineBatch(List<float> vertices, Vector4D<float> color)
+    {
+        DrawDynamicBatch(vertices, color, PrimitiveType.Lines);
+    }
+
+    private void AddScreenQuad(List<float> vertices, float x, float y, float width, float height)
+    {
+        if (width <= 0 || height <= 0) return;
+
+        var left = -1.0f + 2.0f * x / _framebufferWidth;
+        var right = -1.0f + 2.0f * (x + width) / _framebufferWidth;
+        var top = 1.0f - 2.0f * y / _framebufferHeight;
+        var bottom = 1.0f - 2.0f * (y + height) / _framebufferHeight;
+
+        vertices.Add(left);
+        vertices.Add(top);
+        vertices.Add(left);
+        vertices.Add(bottom);
+        vertices.Add(right);
+        vertices.Add(bottom);
+
+        vertices.Add(left);
+        vertices.Add(top);
+        vertices.Add(right);
+        vertices.Add(bottom);
+        vertices.Add(right);
+        vertices.Add(top);
+    }
+
+    private unsafe void DrawDynamicBatch(
+        List<float> vertices,
+        Vector4D<float> color,
+        PrimitiveType primitiveType)
     {
         if (vertices.Count == 0) return;
 
@@ -279,7 +371,7 @@ public sealed class Renderer : IDisposable
                 BufferUsageARB.DynamicDraw);
         }
 
-        _gl.DrawArrays(PrimitiveType.Lines, 0, (uint)(vertexData.Length / 2));
+        _gl.DrawArrays(primitiveType, 0, (uint)(vertexData.Length / 2));
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
         _gl.BindVertexArray(0);
     }
