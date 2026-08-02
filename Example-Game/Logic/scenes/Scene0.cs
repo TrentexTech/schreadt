@@ -13,7 +13,6 @@ public class Scene0 : SceneLogic
 
     public override void Update(double dt)
     {
-        throw new NotImplementedException();
     }
 
     public override void Init()

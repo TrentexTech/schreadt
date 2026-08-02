@@ -9,7 +9,7 @@ public class Window
 {
     private Application _app;
     private readonly IWindow _window;
-    private Renderer _renderer;
+    private Renderer? _renderer;
 
     internal Window(Application app)
     {
@@ -27,6 +27,8 @@ public class Window
         _window.Load += OnLoad;
         _window.Update += OnUpdate;
         _window.Render += OnRender;
+        _window.FramebufferResize += OnFramebufferResize;
+        _window.Closing += OnClosing;
     }
 
     internal void Run()
@@ -38,6 +40,7 @@ public class Window
     {
         var gl = GL.GetApi(_window);
         _renderer = new Renderer(gl);
+        OnFramebufferResize(_window.FramebufferSize);
     }
 
     private void OnUpdate(double dt)
@@ -47,6 +50,17 @@ public class Window
 
     private void OnRender(double dt)
     {
-        _app.Render(_renderer);
+        if (_renderer is not null) _app.Render(_renderer);
+    }
+
+    private void OnFramebufferResize(Vector2D<int> size)
+    {
+        _renderer?.Resize(size.X, size.Y);
+    }
+
+    private void OnClosing()
+    {
+        _renderer?.Dispose();
+        _renderer = null;
     }
 }

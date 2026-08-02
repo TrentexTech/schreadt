@@ -2,13 +2,23 @@ using Schreadt_Engine.Component.Logic;
 
 namespace Schreadt_Engine.Component;
 
-public class Camera
+public class Camera : GameObject
 {
-    public void Init()
+    private ICameraLogic? _cameraLogic;
+
+    public void InitLogic(ICameraLogic logic)
     {
+        _cameraLogic = logic;
+        _cameraLogic.Init(this);
     }
 
-    public void Update(double dt)
+    protected override void OnUpdate(double dt)
     {
+        _cameraLogic?.Update(dt);
     }
+}
+
+public interface ICameraLogic : ILogic
+{
+    void Init(Camera camera);
 }

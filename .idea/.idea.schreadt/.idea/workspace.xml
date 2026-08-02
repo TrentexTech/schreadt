@@ -16,34 +16,20 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="66b6cde2-e2ab-48f3-8092-b1f61b2cee71" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/Example-Game/Logic/ExampleGameLogic.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Example-Game/Program.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Example-Game/assets/default.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Example-Game/config/config.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Asset/AssetLibrary.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Asset/AssetLibraryManifest.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Asset/Assets.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Asset/LooseAssetLibrary.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Actor.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Camera.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/GameObject.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Logic/ActorLogic.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Logic/GameLogic.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Logic/ILogic.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Logic/SceneLogic.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/PreFab/Circle.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Root.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Component/Scene.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/Application.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/Config.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/EngineMain.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/FileHandler.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/Reality.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/Renderer.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/State.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/Core/Window.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/schreadt-engine/EntryPoint.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.schreadt/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.schreadt/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Schreadt-Engine/schreadt-engine.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/Schreadt-Engine/schreadt-engine.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/global.json" beforeDir="false" afterPath="$PROJECT_DIR$/global.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/Actor.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/Actor.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/Camera.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/Camera.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/GameObject.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/GameObject.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/Logic/ActorLogic.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/Logic/ActorLogic.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/PreFab/Circle.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/PreFab/Circle.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/Root.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/Root.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Component/Scene.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Component/Scene.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Core/Reality.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Core/Reality.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Core/Renderer.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Core/Renderer.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/schreadt-engine/Core/Window.cs" beforeDir="false" afterPath="$PROJECT_DIR$/schreadt-engine/Core/Window.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -54,17 +40,17 @@
     <option name="firstShow" value="false" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="26" />
-    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+    <option name="cachedIndexableFilesCount" value="20" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/ec944bd49d9befa9caeb70276da5cdefed28f5905acfbee0b81c57b9262bb5/File.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/f1e6b8db99915e9ffcea2c6fd6fa2ebcfbd7de2b484386fc464a54b8751/Vector2D.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Example-Game/Logic/ExampleGameLogic.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/Example-Game/Program.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/Example-Game/Program.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Schreadt-Engine/Asset/AssetLibraryManifest.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Schreadt-Engine/Asset/Assets.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/Schreadt-Engine/Asset/LooseAssetLibrary.cs" root0="FORCE_HIGHLIGHTING" />
@@ -91,6 +77,65 @@
     <commands />
     <urls />
   </component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.1968360639960633" />
+      <entry key="MS500" value="3.3249857622142174" />
+      <entry key="S2" value="9.814219207767957" />
+      <entry key="S5" value="18.396073505939434" />
+      <entry key="S10" value="24.473066049797357" />
+      <entry key="S30" value="31.211925264695463" />
+      <entry key="S60" value="37.51880797789701" />
+      <entry key="M2" value="47.20302577020467" />
+      <entry key="M5" value="67.65129266529884" />
+      <entry key="M10" value="91.52046719507553" />
+      <entry key="M15" value="107.08331272302301" />
+      <entry key="M30" value="132.2613912189363" />
+      <entry key="H1" value="153.41944066515038" />
+      <entry key="H2" value="169.22934678756874" />
+      <entry key="H4" value="179.47448211689056" />
+      <entry key="D1" value="189.72303469211118" />
+      <entry key="W1" value="191.6696063983641" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="1.2362180921183452E-140" />
+      <entry key="S2" value="1.0544446163878393E-35" />
+      <entry key="S5" value="1.0214321175178769E-14" />
+      <entry key="S10" value="1.0106592489646927E-7" />
+      <entry key="S30" value="0.004658035379310236" />
+      <entry key="S60" value="0.06853838631316167" />
+      <entry key="M2" value="0.30797728011397135" />
+      <entry key="M5" value="1.8462600685897261" />
+      <entry key="M10" value="5.245955590290672" />
+      <entry key="M15" value="7.989800157132113" />
+      <entry key="M30" value="13.484131816350455" />
+      <entry key="H1" value="20.0102604977153" />
+      <entry key="H2" value="26.275024354917882" />
+      <entry key="H4" value="30.886187446148348" />
+      <entry key="D1" value="35.854312949600285" />
+      <entry key="W1" value="36.83288395611917" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="1.1559884235105615" />
+      <entry key="MS500" value="3.301327247601916" />
+      <entry key="S2" value="9.796158134116682" />
+      <entry key="S5" value="18.382472754359533" />
+      <entry key="S10" value="24.46402337521399" />
+      <entry key="S30" value="31.212660364161756" />
+      <entry key="S60" value="37.58443430550264" />
+      <entry key="M2" value="47.507181878892105" />
+      <entry key="M5" value="69.48344688903151" />
+      <entry key="M10" value="96.74386842730398" />
+      <entry key="M15" value="115.04963926221463" />
+      <entry key="M30" value="145.72536740063995" />
+      <entry key="H1" value="173.41470608148876" />
+      <entry key="H2" value="195.49454532748996" />
+      <entry key="H4" value="210.35490587628647" />
+      <entry key="D1" value="225.57623490826552" />
+      <entry key="W1" value="228.50232712132302" />
+    </decayedShown>
+  </component>
   <component name="ProblemsViewState">
     <option name="selectedTabId" value="SWEA" />
   </component>
@@ -105,25 +150,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;.NET Project.Example-Game.executor&quot;: &quot;Debug&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
-    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
-    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
-    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
-    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;RiderNuGetOptionsPageId&quot;,
-    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    ".NET Project.Example-Game.executor": "Debug",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "cidr.known.project.marker": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "git-widget-placeholder": "master",
+    "ignore.virus.scanning.warn.message": "true",
+    "junie.onboarding.icon.badge.shown": "true",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "RiderNuGetOptionsPageId",
+    "to.speed.mode.migration.done": "true"
   }
-}</component>
+}]]></component>
   <component name="RecapSpentCounter">
     <option name="endsOfQuotaMs" value="1773360150255" />
     <option name="spentUsd" value="0.1365585" />
@@ -197,8 +244,15 @@
       <workItem from="1777708575469" duration="123000" />
       <workItem from="1777800800573" duration="11000" />
       <workItem from="1783952844104" duration="128000" />
+      <workItem from="1783953006936" duration="5875000" />
+      <workItem from="1783966216738" duration="1778000" />
+      <workItem from="1784038164256" duration="5637000" />
+      <workItem from="1785677850919" duration="149000" />
     </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
@@ -219,17 +273,17 @@
           <option name="timeStamp" value="3" />
         </breakpoint>
         <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/Schreadt-Engine/Core/Window.cs</url>
-          <line>48</line>
-          <properties documentPath="D:\Dev\cs\Schreadt\Schreadt-Engine\Core\Window.cs" containingFunctionPresentation="Method 'OnRender'">
+          <url>file://$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs</url>
+          <line>10</line>
+          <properties documentPath="D:\Dev\cs\Schreadt\Example-Game\Logic\scenes\Scene0.cs" containingFunctionPresentation="Constructor 'Scene0'">
             <startOffsets>
-              <option value="1056" />
+              <option value="231" />
             </startOffsets>
             <endOffsets>
-              <option value="1057" />
+              <option value="245" />
             </endOffsets>
           </properties>
-          <option name="timeStamp" value="5" />
+          <option name="timeStamp" value="4" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

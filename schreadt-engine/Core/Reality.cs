@@ -7,7 +7,7 @@ public class Reality : IUpdateable
 {
     public GameLogic? GameLogic;
     public Scene Scene;
-    public Camera Camera;
+    public readonly Camera Camera;
 
     internal Reality()
     {

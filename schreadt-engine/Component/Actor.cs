@@ -4,14 +4,22 @@ namespace Schreadt_Engine.Component;
 
 public abstract class Actor : GameObject
 {
-    public ActorLogic ActorLogic;
+    public ActorLogic? ActorLogic { get; }
 
-    public override void Update(double dt)
+    protected Actor(ActorLogic actorLogic)
     {
-        ActorLogic.Update(dt);
+        ActorLogic = actorLogic;
+
+        ActorLogic.Actor = this;
     }
 
-    public override void Render()
+    protected override void OnInit()
     {
+        ActorLogic?.Init();
+    }
+
+    protected override void OnUpdate(double dt)
+    {
+        ActorLogic?.Update(dt);
     }
 }

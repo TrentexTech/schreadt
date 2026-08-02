@@ -17,20 +17,21 @@ public class Scene : GameObject
         while (all.MoveNext())
         {
             var t2 = (Assembly)all.Current;
-            if (t2.FullName.Contains("System.Private.CoreLib")) continue;
+            if (t2.FullName?.Contains("System.Private.CoreLib") == true) continue;
 
             foreach (var exportedType in t2.GetExportedTypes())
             {
                 if (!exportedType.IsSubclassOf(typeof(SceneLogic))) continue;
                 if (!exportedType.IsPublic) continue;
-                if (!exportedType.FullName.EndsWith(className)) continue;
+                if (exportedType.FullName?.EndsWith(className) != true) continue;
                 t = exportedType;
             }
         }
 
         if (t is null) throw new Exception("SceneLogic not found");
 
-        return Activator.CreateInstance(t, scene) as SceneLogic;
+        return Activator.CreateInstance(t, scene) as SceneLogic
+               ?? throw new Exception($"Could not create scene logic '{t.FullName}'.");
     }
 
     public Scene(int sceneId)
@@ -39,17 +40,13 @@ public class Scene : GameObject
         SceneLogic = CreateSceneLogic(this);
     }
 
-    public void Init()
+    protected override void OnInit()
     {
         SceneLogic.Init();
     }
 
-    public override void Update(double dt)
+    protected override void OnUpdate(double dt)
     {
         SceneLogic.Update(dt);
-    }
-
-    public override void Render()
-    {
     }
 }
