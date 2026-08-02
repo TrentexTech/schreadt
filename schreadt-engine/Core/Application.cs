@@ -43,4 +43,9 @@ internal class Application
     {
         Reality.Render(renderer);
     }
+
+    internal void Shutdown()
+    {
+        Reality.Shutdown();
+    }
 }

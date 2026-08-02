@@ -6,7 +6,7 @@ using Silk.NET.Maths;
 
 namespace Example_Game.Logic.scenes;
 
-public class Scene0 : SceneLogic
+public class Scene1 : SceneLogic
 {
     public override void Update(double dt)
     {
@@ -14,12 +14,16 @@ public class Scene0 : SceneLogic
 
     public override void Init()
     {
-        var player = new Circle(new PlayerCircleLogic());
+        var player = new Circle(new PlayerCircleLogic())
+        {
+            Position = new Vector2D<double>(-0.6, 0.0),
+            Color = new Vector4D<float>(0.45f, 0.9f, 0.45f, 1.0f)
+        };
         var landmark = new Circle
         {
-            Position = new Vector2D<double>(1.2, 0.45),
-            Radius = 0.18,
-            Color = new Vector4D<float>(1.0f, 0.35f, 0.12f, 1.0f)
+            Position = new Vector2D<double>(-1.35, -0.45),
+            Radius = 0.22,
+            Color = new Vector4D<float>(0.75f, 0.3f, 1.0f, 1.0f)
         };
 
         Scene.AddChild(player);

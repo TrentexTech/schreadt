@@ -67,8 +67,15 @@ public class Window
 
     private void OnClosing()
     {
-        _app.Input.Dispose();
-        _renderer?.Dispose();
-        _renderer = null;
+        try
+        {
+            _app.Shutdown();
+        }
+        finally
+        {
+            _app.Input.Dispose();
+            _renderer?.Dispose();
+            _renderer = null;
+        }
     }
 }
