@@ -3,10 +3,13 @@ namespace Schreadt_Engine.Core;
 internal class Application
 {
     internal readonly Window Window;
+    internal readonly InputManager Input;
     internal Reality Reality;
 
     internal Application()
     {
+        Input = new InputManager();
+        State.SetInput(Input);
         Reality = new Reality();
         State.SetCurrentReality(Reality);
         Window = new Window(this);
@@ -24,7 +27,14 @@ internal class Application
 
     internal void Update(double dt)
     {
-        Reality.Update(dt);
+        try
+        {
+            Reality.Update(dt);
+        }
+        finally
+        {
+            Input.EndFrame();
+        }
     }
 
     internal void Render(Renderer renderer)

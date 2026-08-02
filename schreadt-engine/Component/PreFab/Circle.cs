@@ -10,24 +10,12 @@ public class Circle : Actor
 
     public Vector4D<float> Color { get; init; } = new(0.15f, 0.65f, 1.0f, 1.0f);
 
-    public Circle() : base(new CircleLogic())
+    public Circle(ActorLogic? actorLogic = null) : base(actorLogic)
     {
     }
 
     protected override void OnRender(Renderer renderer)
     {
         renderer.DrawCircle(Position, Radius, Color);
-    }
-}
-
-public class CircleLogic : ActorLogic
-{
-    public override void Update(double dt)
-    {
-        Actor.Move(0.001, 0);
-    }
-
-    public override void Init()
-    {
     }
 }

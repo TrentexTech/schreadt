@@ -44,6 +44,7 @@ public class Window
 
     private void OnLoad()
     {
+        _app.Input.Initialize(_window);
         var gl = GL.GetApi(_window);
         _renderer = new Renderer(gl);
         OnFramebufferResize(_window.FramebufferSize);
@@ -66,6 +67,7 @@ public class Window
 
     private void OnClosing()
     {
+        _app.Input.Dispose();
         _renderer?.Dispose();
         _renderer = null;
     }

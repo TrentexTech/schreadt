@@ -6,11 +6,11 @@ public abstract class Actor : GameObject
 {
     public ActorLogic? ActorLogic { get; }
 
-    protected Actor(ActorLogic actorLogic)
+    protected Actor(ActorLogic? actorLogic = null)
     {
         ActorLogic = actorLogic;
 
-        ActorLogic.Actor = this;
+        if (ActorLogic is not null) ActorLogic.Actor = this;
     }
 
     protected override void OnInit()
