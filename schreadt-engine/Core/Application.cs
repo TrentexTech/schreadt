@@ -7,8 +7,9 @@ internal class Application
 
     internal Application()
     {
-        Window = new Window(this);
         Reality = new Reality();
+        State.SetCurrentReality(Reality);
+        Window = new Window(this);
     }
 
     internal void Init()

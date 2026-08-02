@@ -46,6 +46,8 @@ public sealed class Renderer : IDisposable
 
     private int _framebufferWidth = 1;
     private int _framebufferHeight = 1;
+    private CameraView _cameraView;
+    private bool _renderingFrame;
     private bool _disposed;
 
     public Renderer(GL gl)
@@ -67,9 +69,21 @@ public sealed class Renderer : IDisposable
     public void Render(Camera camera, GameObject obj)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(camera);
+        ArgumentNullException.ThrowIfNull(obj);
 
-        _gl.Clear(ClearBufferMask.ColorBufferBit);
-        obj.Render(this);
+        _cameraView = camera.CreateView((double)_framebufferWidth / _framebufferHeight);
+        _renderingFrame = true;
+
+        try
+        {
+            _gl.Clear(ClearBufferMask.ColorBufferBit);
+            obj.Render(this);
+        }
+        finally
+        {
+            _renderingFrame = false;
+        }
     }
 
     public void Resize(int width, int height)
@@ -85,14 +99,14 @@ public sealed class Renderer : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (radius <= 0) return;
+        if (!_renderingFrame) throw new InvalidOperationException("Draw calls must occur while a camera is rendering a frame.");
 
-        var aspectCorrection = (float)_framebufferHeight / _framebufferWidth;
-        var xScale = (float)radius * aspectCorrection;
-        var yScale = (float)radius;
+        var projectedCenter = _cameraView.WorldToNormalizedDevicePoint(center);
+        var projectedScale = _cameraView.WorldRadiusToNormalizedDeviceScale(radius);
 
         _gl.UseProgram(_shaderProgram);
-        _gl.Uniform2(_centerUniform, (float)center.X, (float)center.Y);
-        _gl.Uniform2(_scaleUniform, xScale, yScale);
+        _gl.Uniform2(_centerUniform, (float)projectedCenter.X, (float)projectedCenter.Y);
+        _gl.Uniform2(_scaleUniform, (float)projectedScale.X, (float)projectedScale.Y);
         _gl.Uniform4(_colorUniform, color.X, color.Y, color.Z, color.W);
 
         _gl.BindVertexArray(_circleVertexArray);

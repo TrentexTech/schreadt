@@ -40,7 +40,7 @@
     <option name="firstShow" value="false" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="20" />
+    <option name="cachedIndexableFilesCount" value="21" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -247,7 +247,7 @@
       <workItem from="1783953006936" duration="5875000" />
       <workItem from="1783966216738" duration="1778000" />
       <workItem from="1784038164256" duration="5637000" />
-      <workItem from="1785677850919" duration="149000" />
+      <workItem from="1785677850919" duration="241000" />
     </task>
     <servers />
   </component>
