@@ -36,8 +36,7 @@ public class Scene0 : SceneLogic
         };
         var playerBody = new RigidBody2D(player)
         {
-            BodyType = CollisionBodyType2D.Dynamic,
-            UseGravity = false
+            BodyType = CollisionBodyType2D.Kinematic
         };
         var fallingBody = new RigidBody2D(fallingCircle)
         {

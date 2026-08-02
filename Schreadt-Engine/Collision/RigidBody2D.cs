@@ -6,6 +6,7 @@ namespace Schreadt_Engine.Collision;
 public enum CollisionBodyType2D
 {
     Static,
+    Kinematic,
     Dynamic
 }
 
@@ -80,9 +81,10 @@ public sealed class RigidBody2D
 
     internal void Integrate(Vector2D<double> gravity, double dt)
     {
-        if (BodyType != CollisionBodyType2D.Dynamic || !Owner.Active) return;
+        if (BodyType == CollisionBodyType2D.Static || !Owner.Active) return;
 
-        if (UseGravity) Velocity += gravity * (GravityScale * dt);
+        if (BodyType == CollisionBodyType2D.Dynamic && UseGravity)
+            Velocity += gravity * (GravityScale * dt);
         Owner.Move(Velocity * dt);
     }
 

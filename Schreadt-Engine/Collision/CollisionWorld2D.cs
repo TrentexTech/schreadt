@@ -173,18 +173,19 @@ public sealed class CollisionWorld2D
 
         var firstBody = manifold.First.Body;
         var secondBody = manifold.Second.Body;
+        var (firstCorrectionShare, secondCorrectionShare) = GetCorrectionShares(firstBody, secondBody);
+        var correction = manifold.Normal * manifold.Penetration;
+
+        if (firstCorrectionShare > 0)
+            firstBody.Owner.Move(-correction * firstCorrectionShare);
+        if (secondCorrectionShare > 0)
+            secondBody.Owner.Move(correction * secondCorrectionShare);
+
         var firstInverseMass = firstBody.InverseMass;
         var secondInverseMass = secondBody.InverseMass;
         var totalInverseMass = firstInverseMass + secondInverseMass;
 
         if (totalInverseMass <= 0) return;
-
-        var correction = manifold.Normal * manifold.Penetration;
-
-        if (firstInverseMass > 0)
-            firstBody.Owner.Move(-correction * (firstInverseMass / totalInverseMass));
-        if (secondInverseMass > 0)
-            secondBody.Owner.Move(correction * (secondInverseMass / totalInverseMass));
 
         var relativeVelocity = secondBody.Velocity - firstBody.Velocity;
         var velocityAlongNormal = relativeVelocity.X * manifold.Normal.X
@@ -198,6 +199,32 @@ public sealed class CollisionWorld2D
 
         if (firstInverseMass > 0) firstBody.Velocity -= impulse * firstInverseMass;
         if (secondInverseMass > 0) secondBody.Velocity += impulse * secondInverseMass;
+    }
+
+    private static (double First, double Second) GetCorrectionShares(
+        RigidBody2D first,
+        RigidBody2D second)
+    {
+        if (first.BodyType == CollisionBodyType2D.Static)
+        {
+            return second.BodyType == CollisionBodyType2D.Static ? (0.0, 0.0) : (0.0, 1.0);
+        }
+
+        if (second.BodyType == CollisionBodyType2D.Static) return (1.0, 0.0);
+
+        if (first.BodyType == CollisionBodyType2D.Kinematic)
+        {
+            return second.BodyType == CollisionBodyType2D.Dynamic ? (0.0, 1.0) : (0.0, 0.0);
+        }
+
+        if (second.BodyType == CollisionBodyType2D.Kinematic) return (1.0, 0.0);
+
+        var firstInverseMass = first.InverseMass;
+        var secondInverseMass = second.InverseMass;
+        var totalInverseMass = firstInverseMass + secondInverseMass;
+        return totalInverseMass > 0
+            ? (firstInverseMass / totalInverseMass, secondInverseMass / totalInverseMass)
+            : (0.0, 0.0);
     }
 
     private static void NotifyEntered(CollisionManifold manifold)
