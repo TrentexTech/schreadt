@@ -3,12 +3,6 @@ using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Collision;
 
-public enum CollisionBodyType2D
-{
-    Static,
-    Dynamic
-}
-
 public readonly record struct CollisionContact2D(
     Collider2D Other,
     Vector2D<double> Normal,
@@ -21,15 +15,21 @@ public abstract class Collider2D
     internal long Id { get; } = Interlocked.Increment(ref _nextId);
     internal CollisionWorld2D? World { get; set; }
 
-    protected Collider2D(GameObject owner)
+    protected Collider2D(RigidBody2D body)
     {
-        ArgumentNullException.ThrowIfNull(owner);
-        Owner = owner;
+        ArgumentNullException.ThrowIfNull(body);
+        Body = body;
     }
 
-    public GameObject Owner { get; }
+    public RigidBody2D Body { get; }
 
-    public CollisionBodyType2D BodyType { get; set; } = CollisionBodyType2D.Static;
+    public GameObject Owner => Body.Owner;
+
+    public CollisionBodyType2D BodyType
+    {
+        get => Body.BodyType;
+        set => Body.BodyType = value;
+    }
 
     public bool Enabled { get; set; } = true;
 
@@ -52,7 +52,11 @@ public sealed class CircleCollider2D : Collider2D
 {
     private double _radius;
 
-    public CircleCollider2D(GameObject owner, double radius) : base(owner)
+    public CircleCollider2D(GameObject owner, double radius) : this(new RigidBody2D(owner), radius)
+    {
+    }
+
+    public CircleCollider2D(RigidBody2D body, double radius) : base(body)
     {
         Radius = radius;
     }

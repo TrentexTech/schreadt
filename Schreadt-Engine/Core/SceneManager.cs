@@ -83,7 +83,7 @@ public sealed class SceneManager
 
         ApplyPendingSceneChange();
         CurrentScene!.Update(dt);
-        CurrentScene.Collisions.Step();
+        CurrentScene.Collisions.Step(dt);
     }
 
     internal void Shutdown()
