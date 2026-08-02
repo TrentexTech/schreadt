@@ -16,6 +16,7 @@ internal static class FileHandler
         }
         catch (Exception e)
         {
+            // TODO: Handle missing file.
             throw;
         }
     }

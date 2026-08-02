@@ -83,7 +83,13 @@ public sealed class SceneManager
 
         ApplyPendingSceneChange();
         CurrentScene!.Update(dt);
-        CurrentScene.Collisions.Step(dt);
+    }
+
+    internal void FixedUpdate(double dt)
+    {
+        if (!_initialized) throw new InvalidOperationException("The scene manager has not been initialized.");
+
+        CurrentScene!.Collisions.Step(dt);
     }
 
     internal void Shutdown()

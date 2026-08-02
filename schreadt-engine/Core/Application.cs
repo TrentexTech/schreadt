@@ -4,6 +4,8 @@ namespace Schreadt_Engine.Core;
 
 internal class Application
 {
+    private readonly FixedStepClock _physicsClock = new();
+
     internal readonly Window Window;
     internal readonly InputManager Input;
     internal readonly Reality Reality;
@@ -31,7 +33,16 @@ internal class Application
     {
         try
         {
-            Reality.Update(dt);
+            var timing = _physicsClock.Advance(dt);
+
+            Reality.UpdateGameplay(timing.FrameDeltaTime);
+
+            for (var step = 0; step < timing.FixedStepCount; step++)
+            {
+                Reality.FixedUpdate(FixedStepClock.FixedDeltaTime);
+            }
+
+            Reality.UpdateCamera(timing.FrameDeltaTime);
         }
         finally
         {

@@ -13,8 +13,6 @@ public class Reality : IUpdateable
         ?? throw new InvalidOperationException("No scene is currently loaded.");
     public Camera MainCamera { get; private set; }
 
-    public Camera Camera => MainCamera;
-
     internal Reality(GameLogic? gameLogic)
     {
         Scenes = new SceneManager();
@@ -33,8 +31,23 @@ public class Reality : IUpdateable
 
     public void Update(double dt)
     {
+        UpdateGameplay(dt);
+        UpdateCamera(dt);
+    }
+
+    internal void UpdateGameplay(double dt)
+    {
         GameLogic?.Update(dt);
         Scenes.Update(dt);
+    }
+
+    internal void FixedUpdate(double dt)
+    {
+        Scenes.FixedUpdate(dt);
+    }
+
+    internal void UpdateCamera(double dt)
+    {
         MainCamera.Update(dt);
     }
 
