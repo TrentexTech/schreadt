@@ -2,6 +2,7 @@ using Schreadt_Engine.Component;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
+using Silk.NET.Windowing.Sdl;
 
 namespace Schreadt_Engine.Core;
 
@@ -15,6 +16,8 @@ public class Window
     {
         _app = app;
 
+        SdlWindowing.Use();
+
         var title = Config.Data.Window.Title;
         var size = new Vector2D<int>(Config.Data.Window.DefaultSize.Width, Config.Data.Window.DefaultSize.Height);
 
@@ -23,6 +26,9 @@ public class Window
         options.Title = title;
 
         _window = Silk.NET.Windowing.Window.Create(options);
+
+        if (!SdlWindowing.IsViewSdl(_window))
+            throw new InvalidOperationException("Silk.NET did not create the window with the SDL backend.");
 
         _window.Load += OnLoad;
         _window.Update += OnUpdate;
