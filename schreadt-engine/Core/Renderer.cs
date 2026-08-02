@@ -7,6 +7,7 @@ namespace Schreadt_Engine.Core;
 public sealed class Renderer : IDisposable
 {
     private const int CircleSegmentCount = 96;
+    private const int MaximumGridLineCount = 2048;
 
     private const string VertexShaderSource = """
         #version 330 core
@@ -39,6 +40,8 @@ public sealed class Renderer : IDisposable
     private readonly uint _circleVertexArray;
     private readonly uint _circleVertexBuffer;
     private readonly int _circleVertexCount;
+    private readonly uint _lineVertexArray;
+    private readonly uint _lineVertexBuffer;
     private readonly uint _shaderProgram;
     private readonly int _centerUniform;
     private readonly int _scaleUniform;
@@ -60,6 +63,7 @@ public sealed class Renderer : IDisposable
         _colorUniform = _gl.GetUniformLocation(_shaderProgram, "uColor");
 
         (_circleVertexArray, _circleVertexBuffer, _circleVertexCount) = CreateCircleMesh();
+        (_lineVertexArray, _lineVertexBuffer) = CreateLineMesh();
 
         _gl.ClearColor(0.055f, 0.065f, 0.09f, 1.0f);
         _gl.Enable(EnableCap.Blend);
@@ -78,6 +82,7 @@ public sealed class Renderer : IDisposable
         try
         {
             _gl.Clear(ClearBufferMask.ColorBufferBit);
+            if (obj is Scene { Background.Enabled: true } scene) DrawGrid(scene.Background);
             obj.Render(this);
         }
         finally
@@ -120,6 +125,8 @@ public sealed class Renderer : IDisposable
 
         _gl.DeleteBuffer(_circleVertexBuffer);
         _gl.DeleteVertexArray(_circleVertexArray);
+        _gl.DeleteBuffer(_lineVertexBuffer);
+        _gl.DeleteVertexArray(_lineVertexArray);
         _gl.DeleteProgram(_shaderProgram);
         _gl.Dispose();
         _disposed = true;
@@ -160,6 +167,137 @@ public sealed class Renderer : IDisposable
         _gl.BindVertexArray(0);
 
         return (vertexArray, vertexBuffer, vertexCount);
+    }
+
+    private unsafe (uint VertexArray, uint VertexBuffer) CreateLineMesh()
+    {
+        var vertexArray = _gl.GenVertexArray();
+        var vertexBuffer = _gl.GenBuffer();
+        var initialVertices = new float[4];
+
+        _gl.BindVertexArray(vertexArray);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBuffer);
+
+        fixed (float* vertexData = initialVertices)
+        {
+            _gl.BufferData(
+                BufferTargetARB.ArrayBuffer,
+                (nuint)(initialVertices.Length * sizeof(float)),
+                vertexData,
+                BufferUsageARB.DynamicDraw);
+        }
+
+        _gl.EnableVertexAttribArray(0);
+        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 2 * sizeof(float), (void*)0);
+
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
+        _gl.BindVertexArray(0);
+
+        return (vertexArray, vertexBuffer);
+    }
+
+    private void DrawGrid(GridBackground2D grid)
+    {
+        var corners = new[]
+        {
+            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(-1.0, -1.0)),
+            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(-1.0, 1.0)),
+            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(1.0, -1.0)),
+            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(1.0, 1.0))
+        };
+        var minimumX = corners.Min(point => point.X);
+        var maximumX = corners.Max(point => point.X);
+        var minimumY = corners.Min(point => point.Y);
+        var maximumY = corners.Max(point => point.Y);
+        var estimatedLineCount = (maximumX - minimumX + maximumY - minimumY) / grid.CellSize + 4.0;
+        var indexStride = Math.Max(1L, (long)Math.Ceiling(estimatedLineCount / MaximumGridLineCount));
+        var minimumXIndex = (long)Math.Floor(minimumX / grid.CellSize);
+        var maximumXIndex = (long)Math.Ceiling(maximumX / grid.CellSize);
+        var minimumYIndex = (long)Math.Floor(minimumY / grid.CellSize);
+        var maximumYIndex = (long)Math.Ceiling(maximumY / grid.CellSize);
+        var minorVertices = new List<float>();
+        var majorVertices = new List<float>();
+        var axisVertices = new List<float>();
+
+        for (var index = FirstMultipleAtOrAbove(minimumXIndex, indexStride);
+             index <= maximumXIndex;
+             index += indexStride)
+        {
+            var x = index * grid.CellSize;
+            AddGridLine(
+                SelectGridBatch(index, grid.MajorLineEvery, minorVertices, majorVertices, axisVertices),
+                new Vector2D<double>(x, minimumY),
+                new Vector2D<double>(x, maximumY));
+        }
+
+        for (var index = FirstMultipleAtOrAbove(minimumYIndex, indexStride);
+             index <= maximumYIndex;
+             index += indexStride)
+        {
+            var y = index * grid.CellSize;
+            AddGridLine(
+                SelectGridBatch(index, grid.MajorLineEvery, minorVertices, majorVertices, axisVertices),
+                new Vector2D<double>(minimumX, y),
+                new Vector2D<double>(maximumX, y));
+        }
+
+        DrawLineBatch(minorVertices, grid.MinorLineColor);
+        DrawLineBatch(majorVertices, grid.MajorLineColor);
+        DrawLineBatch(axisVertices, grid.OriginAxisColor);
+    }
+
+    private void AddGridLine(List<float> vertices, Vector2D<double> start, Vector2D<double> end)
+    {
+        var projectedStart = _cameraView.WorldToNormalizedDevicePoint(start);
+        var projectedEnd = _cameraView.WorldToNormalizedDevicePoint(end);
+
+        vertices.Add((float)projectedStart.X);
+        vertices.Add((float)projectedStart.Y);
+        vertices.Add((float)projectedEnd.X);
+        vertices.Add((float)projectedEnd.Y);
+    }
+
+    private unsafe void DrawLineBatch(List<float> vertices, Vector4D<float> color)
+    {
+        if (vertices.Count == 0) return;
+
+        var vertexData = vertices.ToArray();
+
+        _gl.UseProgram(_shaderProgram);
+        _gl.Uniform2(_centerUniform, 0.0f, 0.0f);
+        _gl.Uniform2(_scaleUniform, 1.0f, 1.0f);
+        _gl.Uniform4(_colorUniform, color.X, color.Y, color.Z, color.W);
+        _gl.BindVertexArray(_lineVertexArray);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _lineVertexBuffer);
+
+        fixed (float* data = vertexData)
+        {
+            _gl.BufferData(
+                BufferTargetARB.ArrayBuffer,
+                (nuint)(vertexData.Length * sizeof(float)),
+                data,
+                BufferUsageARB.DynamicDraw);
+        }
+
+        _gl.DrawArrays(PrimitiveType.Lines, 0, (uint)(vertexData.Length / 2));
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
+        _gl.BindVertexArray(0);
+    }
+
+    private static List<float> SelectGridBatch(
+        long lineIndex,
+        int majorLineEvery,
+        List<float> minorVertices,
+        List<float> majorVertices,
+        List<float> axisVertices)
+    {
+        if (lineIndex == 0) return axisVertices;
+        return lineIndex % majorLineEvery == 0 ? majorVertices : minorVertices;
+    }
+
+    private static long FirstMultipleAtOrAbove(long value, long interval)
+    {
+        return (long)(Math.Ceiling(value / (double)interval) * interval);
     }
 
     private uint CreateShaderProgram()

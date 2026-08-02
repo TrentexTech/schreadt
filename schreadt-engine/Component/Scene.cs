@@ -10,6 +10,7 @@ public class Scene : GameObject
     public string Name { get; }
     public SceneLogic Logic { get; }
     public CollisionWorld2D Collisions { get; } = new();
+    public GridBackground2D? Background { get; set; } = new();
 
     internal Scene(string name, SceneLogic logic)
     {

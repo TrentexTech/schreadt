@@ -32,6 +32,12 @@ public class Scene1 : SceneLogic
             Radius = 0.14,
             Color = new Vector4D<float>(0.25f, 0.85f, 1.0f, 1.0f)
         };
+        var nonCollidingDecoration = new Circle
+        {
+            Position = new Vector2D<double>(0.75, 0.65),
+            Radius = 0.24,
+            Color = new Vector4D<float>(1.0f, 0.55f, 0.2f, 0.65f)
+        };
         var playerBody = new RigidBody2D(player)
         {
             BodyType = CollisionBodyType2D.Dynamic,
@@ -45,6 +51,7 @@ public class Scene1 : SceneLogic
         Scene.AddChild(player);
         Scene.AddChild(landmark);
         Scene.AddChild(fallingCircle);
+        Scene.AddChild(nonCollidingDecoration);
         Scene.Collisions.Gravity = new Vector2D<double>(0.0, -2.5);
         Scene.Collisions.AddCollider(new CircleCollider2D(playerBody, player.Radius));
         Scene.Collisions.AddCollider(new CircleCollider2D(landmark, landmark.Radius));
