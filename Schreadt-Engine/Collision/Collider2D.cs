@@ -12,6 +12,7 @@ public abstract class Collider2D : GameComponent, ICollisionShape2D
 {
     private static long _nextId;
     private RigidBody2D? _body;
+    private int _collisionLayer;
 
     internal long Id { get; } = Interlocked.Increment(ref _nextId);
     internal CollisionWorld2D? World { get; set; }
@@ -29,7 +30,28 @@ public abstract class Collider2D : GameComponent, ICollisionShape2D
 
     public bool IsTrigger { get; set; }
 
+    /// <summary>The collider's layer, from 0 through 31.</summary>
+    public int CollisionLayer
+    {
+        get => _collisionLayer;
+        set
+        {
+            CollisionLayerMask2D.ValidateLayer(value, nameof(value));
+            _collisionLayer = value;
+        }
+    }
+
+    /// <summary>The layers this collider accepts. Both colliders in a pair must accept each other.</summary>
+    public CollisionLayerMask2D CollisionMask { get; set; } = CollisionLayerMask2D.All;
+
     public abstract Vector2D<double> Center { get; }
+
+    /// <summary>Checks only the bilateral layer masks; enabled and active state are evaluated by the world.</summary>
+    public bool CanCollideWith(Collider2D other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return CollisionMask.Contains(other.CollisionLayer) && other.CollisionMask.Contains(CollisionLayer);
+    }
 
     public event Action<CollisionContact2D>? CollisionEntered;
 

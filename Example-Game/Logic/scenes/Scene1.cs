@@ -85,6 +85,8 @@ public class Scene1 : SceneLogic
         {
             Position = new Vector2D<double>(0.15, 0.15),
             RenderLayer = -10,
+            CollisionLayer = ExampleCollisionLayers.Trigger,
+            CollisionMask = ExampleCollisionLayers.TriggerMask,
             Color = new Vector4D<float>(0.75f, 0.3f, 1.0f, 0.25f),
             Filter = candidate => ReferenceEquals(candidate, player)
         };
@@ -94,8 +96,16 @@ public class Scene1 : SceneLogic
         {
             BodyType = CollisionBodyType2D.Kinematic
         });
-        player.AddComponent(new CircleCollider2D(player.Radius));
-        landmark.AddComponent(new CircleCollider2D(landmark.Radius));
+        player.AddComponent(new CircleCollider2D(player.Radius)
+        {
+            CollisionLayer = ExampleCollisionLayers.Player,
+            CollisionMask = ExampleCollisionLayers.PlayerMask
+        });
+        landmark.AddComponent(new CircleCollider2D(landmark.Radius)
+        {
+            CollisionLayer = ExampleCollisionLayers.World,
+            CollisionMask = ExampleCollisionLayers.WorldMask
+        });
         var fallingBody = fallingCircle.AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Dynamic,
@@ -105,7 +115,11 @@ public class Scene1 : SceneLogic
             LinearDamping = 0.25,
             MaximumSpeed = 3.0
         });
-        fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius));
+        fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius)
+        {
+            CollisionLayer = ExampleCollisionLayers.Hazard,
+            CollisionMask = ExampleCollisionLayers.HazardMask
+        });
         fallingBody.AddImpulse(new Vector2D<double>(0.0, _physicsTuning.InitialImpulse));
 
         Scene.AddChild(energyBeacon);

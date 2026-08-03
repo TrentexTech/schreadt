@@ -30,6 +30,18 @@ public sealed class TriggerZone2D : Actor
         set => Collider.Enabled = value;
     }
 
+    public int CollisionLayer
+    {
+        get => Collider.CollisionLayer;
+        set => Collider.CollisionLayer = value;
+    }
+
+    public CollisionLayerMask2D CollisionMask
+    {
+        get => Collider.CollisionMask;
+        set => Collider.CollisionMask = value;
+    }
+
     public bool Visible { get; set; } = true;
 
     public bool DetectOtherTriggers { get; set; }

@@ -133,7 +133,8 @@ public sealed class CollisionWorld2D
             for (var secondIndex = firstIndex + 1; secondIndex < colliders.Length; secondIndex++)
             {
                 var second = colliders[secondIndex];
-                if (!CanCollide(second) || ReferenceEquals(first.Body, second.Body)) continue;
+                if (!CanCollide(second) || ReferenceEquals(first.Body, second.Body) || !first.CanCollideWith(second))
+                    continue;
 
                 if (!TryCreateManifold(first, second, out var manifold)) continue;
 
