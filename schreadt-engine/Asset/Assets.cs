@@ -5,6 +5,7 @@ namespace Schreadt_Engine.Asset;
 public sealed class AssetCatalog : IDisposable
 {
     private readonly Dictionary<string, AssetRecord> _assets = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ImageAsset> _images = new(StringComparer.Ordinal);
     private readonly List<AssetLibrary> _libraries = [];
     private bool _disposed;
 
@@ -106,12 +107,24 @@ public sealed class AssetCatalog : IDisposable
         }
     }
 
+    public ImageAsset GetImage(string id)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var asset = Get(id);
+        if (_images.TryGetValue(asset.Id, out var image)) return image;
+
+        image = ImageAsset.Decode(asset);
+        _images.Add(asset.Id, image);
+        return image;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
 
         foreach (var library in _libraries) library.Dispose();
         _libraries.Clear();
+        _images.Clear();
         _assets.Clear();
         _disposed = true;
     }

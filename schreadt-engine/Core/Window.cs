@@ -46,7 +46,7 @@ public class Window
     {
         _app.Input.Initialize(_window);
         var gl = GL.GetApi(_window);
-        _renderer = new Renderer(gl);
+        _renderer = new Renderer(gl, State.Assets);
         OnFramebufferResize(_window.FramebufferSize);
     }
 

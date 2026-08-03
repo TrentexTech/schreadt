@@ -16,13 +16,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="66b6cde2-e2ab-48f3-8092-b1f61b2cee71" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.schreadt/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.schreadt/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Example-Game/Example-Game.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/Example-Game.csproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Example-Game/Logic/ExampleGameLogic.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/Logic/ExampleGameLogic.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene0.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene1.cs" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/Logic/scenes/Scene1.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Example-Game/assets/default.json" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/assets/default.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Example-Game/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/Example-Game/config/config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Schreadt-Engine/schreadt-engine.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/Schreadt-Engine/schreadt-engine.csproj" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -244,7 +241,7 @@
       <workItem from="1784038164256" duration="5637000" />
       <workItem from="1785677850919" duration="241000" />
       <workItem from="1785678117853" duration="11417000" />
-      <workItem from="1785741094395" duration="2777000" />
+      <workItem from="1785741094395" duration="3463000" />
     </task>
     <servers />
   </component>

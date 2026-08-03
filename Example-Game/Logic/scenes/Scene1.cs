@@ -45,6 +45,13 @@ public class Scene1 : SceneLogic
             Radius = 0.24,
             Color = new Vector4D<float>(1.0f, 0.55f, 0.2f, 0.65f)
         };
+        var energyBeacon = new Sprite("example/energy-beacon")
+        {
+            Position = new Vector2D<double>(0.65, -0.4),
+            Size = new Vector2D<double>(0.6, 0.6),
+            RotationRadians = 0.12,
+            Tint = new Vector4D<float>(0.8f, 0.95f, 1.0f, 0.9f)
+        };
         player.AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Kinematic
@@ -63,6 +70,7 @@ public class Scene1 : SceneLogic
         fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius));
         fallingBody.AddImpulse(new Vector2D<double>(0.0, _physicsTuning.InitialImpulse));
 
+        Scene.AddChild(energyBeacon);
         Scene.AddChild(player);
         Scene.AddChild(landmark);
         Scene.AddChild(fallingCircle);

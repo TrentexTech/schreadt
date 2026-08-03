@@ -1,3 +1,4 @@
+using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
@@ -37,7 +38,45 @@ public sealed class Renderer : IDisposable
         }
         """;
 
+    private const string SpriteVertexShaderSource = """
+        #version 330 core
+
+        layout (location = 0) in vec2 aPosition;
+        layout (location = 1) in vec2 aTextureCoordinate;
+
+        uniform vec2 uCenter;
+        uniform vec2 uAxisX;
+        uniform vec2 uAxisY;
+        uniform vec4 uTextureRegion;
+
+        out vec2 textureCoordinate;
+
+        void main()
+        {
+            vec2 position = uCenter + aPosition.x * uAxisX + aPosition.y * uAxisY;
+            gl_Position = vec4(position, 0.0, 1.0);
+            textureCoordinate = mix(uTextureRegion.xy, uTextureRegion.zw, aTextureCoordinate);
+        }
+        """;
+
+    private const string SpriteFragmentShaderSource = """
+        #version 330 core
+
+        in vec2 textureCoordinate;
+        out vec4 fragmentColor;
+
+        uniform sampler2D uTexture;
+        uniform vec4 uTint;
+
+        void main()
+        {
+            fragmentColor = texture(uTexture, textureCoordinate) * uTint;
+        }
+        """;
+
     private readonly GL _gl;
+    private readonly AssetCatalog? _assets;
+    private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.Ordinal);
     private readonly uint _circleVertexArray;
     private readonly uint _circleVertexBuffer;
     private readonly int _circleVertexCount;
@@ -47,6 +86,14 @@ public sealed class Renderer : IDisposable
     private readonly int _centerUniform;
     private readonly int _scaleUniform;
     private readonly int _colorUniform;
+    private readonly uint _spriteVertexArray;
+    private readonly uint _spriteVertexBuffer;
+    private readonly uint _spriteShaderProgram;
+    private readonly int _spriteCenterUniform;
+    private readonly int _spriteAxisXUniform;
+    private readonly int _spriteAxisYUniform;
+    private readonly int _spriteRegionUniform;
+    private readonly int _spriteTintUniform;
 
     private int _framebufferWidth = 1;
     private int _framebufferHeight = 1;
@@ -54,9 +101,10 @@ public sealed class Renderer : IDisposable
     private bool _renderingFrame;
     private bool _disposed;
 
-    public Renderer(GL gl)
+    public Renderer(GL gl, AssetCatalog? assets = null)
     {
         _gl = gl;
+        _assets = assets;
 
         _shaderProgram = CreateShaderProgram();
         _centerUniform = _gl.GetUniformLocation(_shaderProgram, "uCenter");
@@ -65,6 +113,17 @@ public sealed class Renderer : IDisposable
 
         (_circleVertexArray, _circleVertexBuffer, _circleVertexCount) = CreateCircleMesh();
         (_lineVertexArray, _lineVertexBuffer) = CreateLineMesh();
+
+        _spriteShaderProgram = CreateShaderProgram(SpriteVertexShaderSource, SpriteFragmentShaderSource, "sprite");
+        _spriteCenterUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uCenter");
+        _spriteAxisXUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uAxisX");
+        _spriteAxisYUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uAxisY");
+        _spriteRegionUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uTextureRegion");
+        _spriteTintUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uTint");
+        (_spriteVertexArray, _spriteVertexBuffer) = CreateSpriteMesh();
+
+        _gl.UseProgram(_spriteShaderProgram);
+        _gl.Uniform1(_gl.GetUniformLocation(_spriteShaderProgram, "uTexture"), 0);
 
         _gl.ClearColor(0.055f, 0.065f, 0.09f, 1.0f);
         _gl.Enable(EnableCap.Blend);
@@ -119,6 +178,65 @@ public sealed class Renderer : IDisposable
         _gl.BindVertexArray(_circleVertexArray);
         _gl.DrawArrays(PrimitiveType.TriangleFan, 0, (uint)_circleVertexCount);
         _gl.BindVertexArray(0);
+    }
+
+    public void DrawSprite(
+        string imageAssetId,
+        Vector2D<double> center,
+        Vector2D<double> size,
+        Vector4D<float> tint,
+        double rotationRadians = 0.0,
+        TextureRegion? region = null,
+        TextureSampling sampling = TextureSampling.Linear)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_renderingFrame) throw new InvalidOperationException("Draw calls must occur while a camera is rendering a frame.");
+        if (!double.IsFinite(center.X) || !double.IsFinite(center.Y))
+            throw new ArgumentOutOfRangeException(nameof(center), "Sprite position must be finite.");
+        if (!double.IsFinite(size.X) || !double.IsFinite(size.Y) || size.X <= 0.0 || size.Y <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Sprite size must be finite and positive.");
+        if (!double.IsFinite(rotationRadians))
+            throw new ArgumentOutOfRangeException(nameof(rotationRadians), "Sprite rotation must be finite.");
+
+        var sourceRegion = region ?? TextureRegion.Full;
+        sourceRegion.Validate();
+        var texture = GetTexture(imageAssetId);
+        SetTextureSampling(texture, sampling);
+
+        var cosine = Math.Cos(rotationRadians);
+        var sine = Math.Sin(rotationRadians);
+        var halfXAxis = new Vector2D<double>(cosine * size.X * 0.5, sine * size.X * 0.5);
+        var halfYAxis = new Vector2D<double>(-sine * size.Y * 0.5, cosine * size.Y * 0.5);
+        var projectedCenter = _cameraView.WorldToNormalizedDevicePoint(center);
+        var projectedXAxis = _cameraView.WorldToNormalizedDevicePoint(center + halfXAxis) - projectedCenter;
+        var projectedYAxis = _cameraView.WorldToNormalizedDevicePoint(center + halfYAxis) - projectedCenter;
+
+        _gl.UseProgram(_spriteShaderProgram);
+        _gl.Uniform2(_spriteCenterUniform, (float)projectedCenter.X, (float)projectedCenter.Y);
+        _gl.Uniform2(_spriteAxisXUniform, (float)projectedXAxis.X, (float)projectedXAxis.Y);
+        _gl.Uniform2(_spriteAxisYUniform, (float)projectedYAxis.X, (float)projectedYAxis.Y);
+        _gl.Uniform4(_spriteRegionUniform, sourceRegion.Left, sourceRegion.Top, sourceRegion.Right, sourceRegion.Bottom);
+        _gl.Uniform4(_spriteTintUniform, tint.X, tint.Y, tint.Z, tint.W);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texture.Handle);
+        _gl.BindVertexArray(_spriteVertexArray);
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        _gl.BindVertexArray(0);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+    }
+
+    public Texture2D GetTexture(string imageAssetId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_assets is null)
+            throw new InvalidOperationException("This renderer was created without an asset catalog.");
+
+        var image = _assets.GetImage(imageAssetId);
+        if (_textures.TryGetValue(image.Id, out var cached)) return cached;
+
+        var texture = UploadTexture(image);
+        _textures.Add(image.Id, texture);
+        return texture;
     }
 
     internal void DrawGuiLabel(GuiLabel label)
@@ -183,6 +301,11 @@ public sealed class Renderer : IDisposable
     {
         if (_disposed) return;
 
+        foreach (var texture in _textures.Values) _gl.DeleteTexture(texture.Handle);
+        _textures.Clear();
+        _gl.DeleteBuffer(_spriteVertexBuffer);
+        _gl.DeleteVertexArray(_spriteVertexArray);
+        _gl.DeleteProgram(_spriteShaderProgram);
         _gl.DeleteBuffer(_circleVertexBuffer);
         _gl.DeleteVertexArray(_circleVertexArray);
         _gl.DeleteBuffer(_lineVertexBuffer);
@@ -254,6 +377,86 @@ public sealed class Renderer : IDisposable
         _gl.BindVertexArray(0);
 
         return (vertexArray, vertexBuffer);
+    }
+
+    private unsafe (uint VertexArray, uint VertexBuffer) CreateSpriteMesh()
+    {
+        float[] vertices =
+        [
+            -1.0f,  1.0f, 0.0f, 0.0f,
+            -1.0f, -1.0f, 0.0f, 1.0f,
+             1.0f, -1.0f, 1.0f, 1.0f,
+            -1.0f,  1.0f, 0.0f, 0.0f,
+             1.0f, -1.0f, 1.0f, 1.0f,
+             1.0f,  1.0f, 1.0f, 0.0f
+        ];
+
+        var vertexArray = _gl.GenVertexArray();
+        var vertexBuffer = _gl.GenBuffer();
+        _gl.BindVertexArray(vertexArray);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBuffer);
+
+        fixed (float* data = vertices)
+        {
+            _gl.BufferData(
+                BufferTargetARB.ArrayBuffer,
+                (nuint)(vertices.Length * sizeof(float)),
+                data,
+                BufferUsageARB.StaticDraw);
+        }
+
+        const uint stride = 4 * sizeof(float);
+        _gl.EnableVertexAttribArray(0);
+        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, stride, (void*)0);
+        _gl.EnableVertexAttribArray(1);
+        _gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, stride, (void*)(2 * sizeof(float)));
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
+        _gl.BindVertexArray(0);
+        return (vertexArray, vertexBuffer);
+    }
+
+    private unsafe Texture2D UploadTexture(ImageAsset image)
+    {
+        var handle = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, handle);
+        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
+
+        var pixels = image.Pixels.Span;
+        fixed (byte* data = pixels)
+        {
+            _gl.TexImage2D(
+                TextureTarget.Texture2D,
+                0,
+                InternalFormat.Rgba8,
+                (uint)image.Width,
+                (uint)image.Height,
+                0,
+                PixelFormat.Rgba,
+                PixelType.UnsignedByte,
+                data);
+        }
+
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+        return new Texture2D(handle, image.Id, image.Width, image.Height);
+    }
+
+    private void SetTextureSampling(Texture2D texture, TextureSampling sampling)
+    {
+        if (texture.CurrentSampling == sampling) return;
+
+        var filter = sampling switch
+        {
+            TextureSampling.Nearest => (int)TextureMinFilter.Nearest,
+            TextureSampling.Linear => (int)TextureMinFilter.Linear,
+            _ => throw new ArgumentOutOfRangeException(nameof(sampling), sampling, "Unsupported texture sampling mode.")
+        };
+
+        _gl.BindTexture(TextureTarget.Texture2D, texture.Handle);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, filter);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, filter);
+        texture.CurrentSampling = sampling;
     }
 
     private void DrawGrid(GridBackground2D grid)
@@ -394,8 +597,13 @@ public sealed class Renderer : IDisposable
 
     private uint CreateShaderProgram()
     {
-        var vertexShader = CompileShader(ShaderType.VertexShader, VertexShaderSource);
-        var fragmentShader = CompileShader(ShaderType.FragmentShader, FragmentShaderSource);
+        return CreateShaderProgram(VertexShaderSource, FragmentShaderSource, "shape");
+    }
+
+    private uint CreateShaderProgram(string vertexSource, string fragmentSource, string label)
+    {
+        var vertexShader = CompileShader(ShaderType.VertexShader, vertexSource);
+        var fragmentShader = CompileShader(ShaderType.FragmentShader, fragmentSource);
         var program = _gl.CreateProgram();
 
         _gl.AttachShader(program, vertexShader);
@@ -412,7 +620,7 @@ public sealed class Renderer : IDisposable
 
         var infoLog = _gl.GetProgramInfoLog(program);
         _gl.DeleteProgram(program);
-        throw new InvalidOperationException($"Could not link the circle shader: {infoLog}");
+        throw new InvalidOperationException($"Could not link the {label} shader: {infoLog}");
     }
 
     private uint CompileShader(ShaderType type, string source)
