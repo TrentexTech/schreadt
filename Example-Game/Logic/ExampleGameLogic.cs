@@ -1,150 +1,71 @@
 using Example_Game.Logic.scenes;
-using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Core;
+using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
 
 namespace Example_Game.Logic;
 
-public class ExampleGameLogic : GameLogic
+public sealed class ExampleGameLogic : GameLogic
 {
-    private const string MainScene = "main";
-    private const string AlternateScene = "alternate";
-    private const double DefaultOrthographicSize = 1.25;
-    private const double MinimumOrthographicSize = 0.25;
-    private const double MaximumOrthographicSize = 8.0;
-    private const double ZoomFactorPerScrollStep = 0.85;
-    private readonly IInputService? _input;
+    internal const string LevelOne = "sunny-meadows";
+    internal const string LevelTwo = "crystal-heights";
+    internal const string LevelThree = "lunar-gardens";
+    internal const string LevelFour = "clockwork-fortress";
+    private readonly IInputService? _inputOverride;
 
-    private IInputService Input => _input ?? State.Input;
+    private IInputService Input => _inputOverride ?? State.Input;
 
     public ExampleGameLogic(IInputService? input = null)
     {
-        _input = input;
-    }
-
-    public override void Update(double dt)
-    {
-        if (Input.WasActionPressed(ExampleInputActions.SwitchScene))
-        {
-            SwitchScene();
-        }
-
-        var scroll = Input.ScrollDelta.Y;
-        if (scroll == 0)
-        {
-            return;
-        }
-
-        var camera = Reality.MainCamera;
-        var requestedSize = camera.OrthographicSize * Math.Pow(ZoomFactorPerScrollStep, scroll);
-        camera.OrthographicSize = Math.Clamp(
-            requestedSize,
-            MinimumOrthographicSize,
-            MaximumOrthographicSize);
+        _inputOverride = input;
     }
 
     public override void Init()
     {
-        Input.SetActionBindings(
-            ExampleInputActions.MoveUp,
-            InputBinding.ForKey(InputKey.W),
-            InputBinding.ForKey(InputKey.Up));
-        Input.SetActionBindings(
-            ExampleInputActions.MoveDown,
-            InputBinding.ForKey(InputKey.S),
-            InputBinding.ForKey(InputKey.Down));
-        Input.SetActionBindings(
-            ExampleInputActions.MoveLeft,
-            InputBinding.ForKey(InputKey.A),
-            InputBinding.ForKey(InputKey.Left));
-        Input.SetActionBindings(
-            ExampleInputActions.MoveRight,
-            InputBinding.ForKey(InputKey.D),
-            InputBinding.ForKey(InputKey.Right));
-        Input.SetActionBindings(
-            ExampleInputActions.MoveToPointer,
-            InputBinding.ForMouseButton(InputMouseButton.Left));
-        Input.SetActionBindings(
-            ExampleInputActions.SwitchScene,
-            InputBinding.ForKey(InputKey.Tab));
+        Input.SetActionBindings(ExampleInputActions.MoveLeft,
+            InputBinding.ForKey(InputKey.A), InputBinding.ForKey(InputKey.Left));
+        Input.SetActionBindings(ExampleInputActions.MoveRight,
+            InputBinding.ForKey(InputKey.D), InputBinding.ForKey(InputKey.Right));
+        Input.SetActionBindings(ExampleInputActions.Jump,
+            InputBinding.ForKey(InputKey.Space), InputBinding.ForKey(InputKey.W), InputBinding.ForKey(InputKey.Up));
+        Input.SetActionBindings(ExampleInputActions.Restart, InputBinding.ForKey(InputKey.R));
+        Input.SetActionBindings(ExampleInputActions.Pause, InputBinding.ForKey(InputKey.P));
 
-        State.Assets.RegisterDecoder(new JsonAssetDecoder<ExamplePhysicsTuning>());
-        var physicsTuning = State.Assets.Get<ExamplePhysicsTuning>("example/physics-tuning");
-        Reality.Scenes.RegisterScene(MainScene, () => new Scene0(physicsTuning, Input));
-        Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1(physicsTuning, Input));
-        Reality.Scenes.LoadScene(MainScene);
-        Reality.MainCamera.OrthographicSize = DefaultOrthographicSize;
+        Reality.Scenes.RegisterScene(LevelOne, () => new Scene0(Input));
+        Reality.Scenes.RegisterScene(LevelTwo, () => new Scene1(Input));
+        Reality.Scenes.RegisterScene(LevelThree, () => new Scene2(Input));
+        Reality.Scenes.RegisterScene(LevelFour, () => new Scene3(Input));
+        Reality.Scenes.LoadScene(LevelOne);
+        Reality.MainCamera.OrthographicSize = 2.4;
 
-        var controls = State.Gui.AddPanel();
-        controls.Position = new Vector2D<float>(12.0f, 66.0f);
-        controls.Padding = 4.0f;
-        controls.Spacing = 4.0f;
-
-        var switchSceneButton = controls.AddButton("SWITCH SCENE");
-        switchSceneButton.Clicked += (_, _) => SwitchScene();
-
-        var pauseButton = controls.AddButton("PAUSE");
-        var stepButton = controls.AddButton("STEP ONE FRAME");
-        stepButton.Enabled = false;
-        pauseButton.Clicked += (_, _) => TogglePauseScreen();
-        State.Runtime.PauseStateChanged += paused =>
-        {
-            pauseButton.Text = paused ? "RESUME" : "PAUSE";
-            stepButton.Enabled = paused;
-        };
-        stepButton.Clicked += (_, _) => State.Runtime.StepOneFrame();
-
-        double[] timeScales = [0.5, 1.0, 2.0];
-        var timeScaleIndex = 1;
-        var timeScaleButton = controls.AddButton("TIME SCALE: 1.0X");
-        timeScaleButton.Clicked += (_, _) =>
-        {
-            timeScaleIndex = (timeScaleIndex + 1) % timeScales.Length;
-            State.Runtime.TimeScale = timeScales[timeScaleIndex];
-            timeScaleButton.Text = FormattableString.Invariant($"TIME SCALE: {State.Runtime.TimeScale:F1}X");
-        };
-
-        var fullscreenButton = controls.AddButton("TOGGLE FULLSCREEN");
-        fullscreenButton.Clicked += (_, _) => State.Window.ToggleFullscreen();
-
-        var borderlessFullscreenButton = controls.AddButton("TOGGLE BORDERLESS");
-        borderlessFullscreenButton.Clicked += (_, _) => State.Window.ToggleBorderlessFullscreen();
-
-        var vsyncButton = controls.AddButton(State.Window.VSync ? "VSYNC: ON" : "VSYNC: OFF");
-        vsyncButton.Clicked += (_, _) =>
-        {
-            State.Window.VSync = !State.Window.VSync;
-            vsyncButton.Text = State.Window.VSync ? "VSYNC: ON" : "VSYNC: OFF";
-        };
-
-        var physicsDebugEnabled = false;
-        var physicsDebugButton = controls.AddButton("PHYSICS DEBUG: OFF");
-        Reality.Scenes.SceneLoaded += scene => scene.Collisions.DebugDraw.Enabled = physicsDebugEnabled;
-        physicsDebugButton.Clicked += (_, _) =>
-        {
-            physicsDebugEnabled = !physicsDebugEnabled;
-            Reality.Scene.Collisions.DebugDraw.Enabled = physicsDebugEnabled;
-            physicsDebugButton.Text = physicsDebugEnabled ? "PHYSICS DEBUG: ON" : "PHYSICS DEBUG: OFF";
-        };
-
-        var quitButton = controls.AddButton("QUIT");
-        quitButton.Clicked += (_, _) => State.Window.RequestClose();
+        var help = State.Gui.AddPanel();
+        help.Position = new Vector2D<float>(12, 12);
+        help.Padding = 7;
+        help.Spacing = 5;
+        help.BackgroundColor = new Vector4D<float>(0.035f, 0.055f, 0.11f, 0.9f);
+        var title = help.AddLabel("SKYBOUND");
+        title.Color = new Vector4D<float>(1f, 0.86f, 0.26f, 1f);
+        help.AddLabel("A/D OR ARROWS: MOVE\nSPACE/W/UP: JUMP\nR: RESTART   P: PAUSE").Scale = 1.25f;
+        help.AddButton("PAUSE").Clicked += (_, _) => TogglePause();
     }
 
-    private void SwitchScene()
+    public override void Update(double dt)
     {
-        Reality.Scene.Screens.Clear();
-        var nextScene = Reality.Scenes.CurrentSceneName == MainScene
-            ? AlternateScene
-            : MainScene;
-        Reality.Scenes.LoadScene(nextScene);
+        if (Input.WasActionPressed(ExampleInputActions.Restart))
+        {
+            Reality.Scene.Screens.Clear();
+            Reality.Scenes.ReloadCurrentScene();
+        }
+
+        if (Input.WasActionPressed(ExampleInputActions.Pause)) TogglePause();
     }
 
-    private void TogglePauseScreen()
+    private void TogglePause()
     {
         var scene = Reality.Scene;
-        if (scene.Screens.Remove(ExampleGameScreens.PauseScreenName)) return;
-        scene.Screens.Push(ExampleGameScreens.CreatePauseScreen(scene));
+        if (scene.Screens.Remove(PlatformerScreens.PauseScreenName)) return;
+        if (!scene.Screens.Contains(PlatformerScreens.VictoryScreenName))
+            scene.Screens.Push(PlatformerScreens.CreatePauseScreen(scene));
     }
 }

@@ -7,17 +7,13 @@ internal static class ExampleCollisionLayers
     internal const int Player = 0;
     internal const int World = 1;
     internal const int Hazard = 2;
-    internal const int Trigger = 3;
+    internal const int Goal = 3;
+    internal const int Collectible = 4;
 
     internal static CollisionLayerMask2D PlayerMask { get; } =
-        CollisionLayerMask2D.FromLayers(World, Hazard, Trigger);
-
+        CollisionLayerMask2D.FromLayers(World, Hazard, Goal, Collectible);
     internal static CollisionLayerMask2D WorldMask { get; } =
-        CollisionLayerMask2D.FromLayers(Player, Hazard);
-
-    internal static CollisionLayerMask2D HazardMask { get; } =
-        CollisionLayerMask2D.FromLayers(Player, World);
-
-    internal static CollisionLayerMask2D TriggerMask { get; } =
+        CollisionLayerMask2D.FromLayers(Player);
+    internal static CollisionLayerMask2D PlayerOnlyMask { get; } =
         CollisionLayerMask2D.FromLayers(Player);
 }
