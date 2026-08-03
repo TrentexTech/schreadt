@@ -4,10 +4,18 @@ namespace Schreadt_Engine.Collision;
 
 public sealed class CollisionWorld2D
 {
+    private readonly record struct ShapePair(Type First, Type Second);
+
     private readonly List<Collider2D> _colliders = [];
     private readonly HashSet<RigidBody2D> _bodies = [];
+    private readonly Dictionary<ShapePair, INarrowPhaseRegistration> _narrowPhases = [];
     private Dictionary<ColliderPair, CollisionManifold> _activePairs = [];
     private Vector2D<double> _gravity = new(0.0, -9.81);
+
+    public CollisionWorld2D()
+    {
+        RegisterNarrowPhase(new CircleCircleNarrowPhase2D());
+    }
 
     public IReadOnlyList<Collider2D> Colliders => _colliders;
 
@@ -23,6 +31,42 @@ public sealed class CollisionWorld2D
 
             _gravity = value;
         }
+    }
+
+    public void RegisterNarrowPhase<TFirst, TSecond>(
+        ICollisionNarrowPhase2D<TFirst, TSecond> narrowPhase,
+        bool replaceExisting = false)
+        where TFirst : Collider2D, ICollisionShape2D
+        where TSecond : Collider2D, ICollisionShape2D
+    {
+        ArgumentNullException.ThrowIfNull(narrowPhase);
+
+        var pair = new ShapePair(typeof(TFirst), typeof(TSecond));
+        var reversePair = new ShapePair(typeof(TSecond), typeof(TFirst));
+        var alreadyRegistered = _narrowPhases.ContainsKey(pair) || _narrowPhases.ContainsKey(reversePair);
+
+        if (alreadyRegistered && !replaceExisting)
+        {
+            throw new InvalidOperationException(
+                $"A narrow-phase handler is already registered for {typeof(TFirst).Name} and {typeof(TSecond).Name}.");
+        }
+
+        if (replaceExisting)
+        {
+            _narrowPhases.Remove(pair);
+            _narrowPhases.Remove(reversePair);
+        }
+
+        _narrowPhases.Add(pair, new NarrowPhaseRegistration<TFirst, TSecond>(narrowPhase));
+    }
+
+    public bool UnregisterNarrowPhase<TFirst, TSecond>()
+        where TFirst : Collider2D, ICollisionShape2D
+        where TSecond : Collider2D, ICollisionShape2D
+    {
+        var pair = new ShapePair(typeof(TFirst), typeof(TSecond));
+        var reversePair = new ShapePair(typeof(TSecond), typeof(TFirst));
+        return _narrowPhases.Remove(pair) || _narrowPhases.Remove(reversePair);
     }
 
     internal void AddCollider(Collider2D collider)
@@ -147,38 +191,56 @@ public sealed class CollisionWorld2D
         return ReferenceEquals(collider.World, this) && collider.Enabled && collider.Owner.Active;
     }
 
-    private static bool TryCreateManifold(
+    private bool TryCreateManifold(
         Collider2D first,
         Collider2D second,
         out CollisionManifold manifold)
     {
-        if (first is CircleCollider2D firstCircle && second is CircleCollider2D secondCircle)
+        var pair = new ShapePair(first.GetType(), second.GetType());
+        if (_narrowPhases.TryGetValue(pair, out var narrowPhase))
         {
-            var offset = secondCircle.Center - firstCircle.Center;
-            var distanceSquared = offset.X * offset.X + offset.Y * offset.Y;
-            var combinedRadius = firstCircle.Radius + secondCircle.Radius;
+            return TryCreateManifold(narrowPhase, first, second, reverseResult: false, out manifold);
+        }
 
-            if (distanceSquared > combinedRadius * combinedRadius)
-            {
-                manifold = default;
-                return false;
-            }
-
-            var distance = Math.Sqrt(distanceSquared);
-            var normal = distance > double.Epsilon
-                ? offset / distance
-                : new Vector2D<double>(1.0, 0.0);
-
-            manifold = new CollisionManifold(
-                firstCircle,
-                secondCircle,
-                normal,
-                combinedRadius - distance);
-            return true;
+        var reversePair = new ShapePair(second.GetType(), first.GetType());
+        if (_narrowPhases.TryGetValue(reversePair, out narrowPhase))
+        {
+            return TryCreateManifold(narrowPhase, second, first, reverseResult: true, out manifold);
         }
 
         manifold = default;
         return false;
+    }
+
+    private static bool TryCreateManifold(
+        INarrowPhaseRegistration narrowPhase,
+        Collider2D handlerFirst,
+        Collider2D handlerSecond,
+        bool reverseResult,
+        out CollisionManifold manifold)
+    {
+        if (!narrowPhase.TryCollide(handlerFirst, handlerSecond, out var result))
+        {
+            manifold = default;
+            return false;
+        }
+
+        ValidateResult(result, narrowPhase);
+        manifold = reverseResult
+            ? new CollisionManifold(handlerSecond, handlerFirst, -result.Normal, result.Penetration)
+            : new CollisionManifold(handlerFirst, handlerSecond, result.Normal, result.Penetration);
+        return true;
+    }
+
+    private static void ValidateResult(CollisionResult2D result, INarrowPhaseRegistration narrowPhase)
+    {
+        var normalLengthSquared = Dot(result.Normal, result.Normal);
+        if (!double.IsFinite(normalLengthSquared) || Math.Abs(normalLengthSquared - 1.0) > 1e-10 ||
+            !double.IsFinite(result.Penetration) || result.Penetration < 0.0)
+        {
+            throw new InvalidDataException(
+                $"The narrow-phase handler for {narrowPhase.FirstType.Name} and {narrowPhase.SecondType.Name} returned an invalid collision result.");
+        }
     }
 
     private static void Resolve(CollisionManifold manifold)
@@ -304,4 +366,26 @@ public sealed class CollisionWorld2D
         Collider2D Second,
         Vector2D<double> Normal,
         double Penetration);
+
+    private interface INarrowPhaseRegistration
+    {
+        Type FirstType { get; }
+        Type SecondType { get; }
+
+        bool TryCollide(Collider2D first, Collider2D second, out CollisionResult2D result);
+    }
+
+    private sealed class NarrowPhaseRegistration<TFirst, TSecond>(
+        ICollisionNarrowPhase2D<TFirst, TSecond> narrowPhase) : INarrowPhaseRegistration
+        where TFirst : Collider2D, ICollisionShape2D
+        where TSecond : Collider2D, ICollisionShape2D
+    {
+        public Type FirstType => typeof(TFirst);
+        public Type SecondType => typeof(TSecond);
+
+        public bool TryCollide(Collider2D first, Collider2D second, out CollisionResult2D result)
+        {
+            return narrowPhase.TryCollide((TFirst)first, (TSecond)second, out result);
+        }
+    }
 }

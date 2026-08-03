@@ -8,7 +8,7 @@ public readonly record struct CollisionContact2D(
     Vector2D<double> Normal,
     double Penetration);
 
-public abstract class Collider2D : GameComponent
+public abstract class Collider2D : GameComponent, ICollisionShape2D
 {
     private static long _nextId;
     private RigidBody2D? _body;
@@ -28,6 +28,8 @@ public abstract class Collider2D : GameComponent
     public bool Enabled { get; set; } = true;
 
     public bool IsTrigger { get; set; }
+
+    public abstract Vector2D<double> Center { get; }
 
     public event Action<CollisionContact2D>? CollisionEntered;
 
@@ -77,5 +79,5 @@ public sealed class CircleCollider2D : Collider2D
 
     public Vector2D<double> Offset { get; set; }
 
-    public Vector2D<double> Center => Owner.Position + Offset;
+    public override Vector2D<double> Center => Owner.Position + Offset;
 }
