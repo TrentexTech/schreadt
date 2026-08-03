@@ -11,14 +11,17 @@ internal static class EngineMain
 
     internal static void Init(GameLogic? gameLogic)
     {
+        EngineLog.Information("Initializing engine.", "Engine");
         Config.Load();
-        assets = AssetCatalog.LoadFromDirectory(FileHandler.ContentRoot, Config.Data.AssetLibraries ?? []);
+        EngineLog.Information("Loading asset libraries.", "Assets");
+        assets = AssetCatalog.LoadFromDirectory(FileHandler.ContentRoot, Config.Data.AssetLibraries);
 
         try
         {
             State.SetAssets(assets);
             app = new Application(gameLogic);
             app.Init();
+            EngineLog.Information("Engine initialized successfully.", "Engine");
         }
         catch
         {
@@ -33,6 +36,7 @@ internal static class EngineMain
     {
         try
         {
+            EngineLog.Information("Starting main loop.", "Engine");
             (app ?? throw new InvalidOperationException("The engine must be initialized before it can start.")).Start();
         }
         finally
@@ -41,6 +45,7 @@ internal static class EngineMain
             assets = null;
             State.SetAssets(null);
             app = null;
+            EngineLog.Information("Engine stopped.", "Engine");
         }
     }
 }

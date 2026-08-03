@@ -17,8 +17,22 @@ public static class EntryPoint
     private static void Start(string[] args, GameLogic? gameLogic)
     {
         State.LaunchArgs = args;
-
-        EngineMain.Init(gameLogic);
-        EngineMain.Start();
+        EngineLog.Initialize();
+        try
+        {
+            EngineMain.Init(gameLogic);
+            EngineMain.Start();
+        }
+        catch (Exception exception)
+        {
+            var logFilePath = EngineLog.CurrentLogFilePath;
+            EngineLog.Fatal("The engine terminated because of an unhandled exception.", exception, "Engine");
+            FatalErrorPresenter.Show(exception, logFilePath);
+            Environment.ExitCode = 1;
+        }
+        finally
+        {
+            EngineLog.Shutdown();
+        }
     }
 }

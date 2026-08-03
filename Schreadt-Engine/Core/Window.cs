@@ -139,6 +139,7 @@ public sealed class Window : IWindowController
 
     private void OnLoad()
     {
+        EngineLog.Information("SDL window and OpenGL context loaded.", "Window");
         _loaded = true;
         _sdl = SdlApi.GetApi();
         _window.Title = _title;
@@ -165,11 +166,13 @@ public sealed class Window : IWindowController
 
     private void OnFramebufferResize(Vector2D<int> size)
     {
+        EngineLog.Debug($"Framebuffer resized to {size.X}x{size.Y}.", "Window");
         _renderer?.Resize(size.X, size.Y);
     }
 
     private void OnClosing()
     {
+        EngineLog.Information("Window is closing.", "Window");
         _closeRequested = true;
         if (_closing) return;
         _closing = true;

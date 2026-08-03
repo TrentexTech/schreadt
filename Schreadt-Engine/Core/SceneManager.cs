@@ -153,9 +153,11 @@ public sealed class SceneManager
         {
             previousScene.Unload();
             _gui?.RemoveLayer(previousScene.Gui);
+            EngineLog.Information($"Scene unloaded: {previousScene.Name}.", "Scenes");
             SceneUnloaded?.Invoke(previousScene);
         }
 
+        EngineLog.Information($"Scene loaded: {nextScene.Name}.", "Scenes");
         SceneLoaded?.Invoke(nextScene);
     }
 
