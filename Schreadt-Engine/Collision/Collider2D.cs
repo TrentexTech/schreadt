@@ -79,6 +79,7 @@ public abstract class Collider2D : GameComponent, ICollisionShape2D
 public sealed class CircleCollider2D : Collider2D
 {
     private double _radius;
+    private Vector2D<double> _offset;
 
     public CircleCollider2D(double radius)
     {
@@ -99,7 +100,17 @@ public sealed class CircleCollider2D : Collider2D
         }
     }
 
-    public Vector2D<double> Offset { get; set; }
+    public Vector2D<double> Offset
+    {
+        get => _offset;
+        set
+        {
+            if (!double.IsFinite(value.X) || !double.IsFinite(value.Y))
+                throw new ArgumentOutOfRangeException(nameof(value), "Collider offset must be finite.");
+
+            _offset = value;
+        }
+    }
 
     public override Vector2D<double> Center => Owner.Position + Offset;
 }

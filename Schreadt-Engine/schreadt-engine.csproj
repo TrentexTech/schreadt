@@ -20,4 +20,8 @@
       <PackageReference Include="Silk.NET.Windowing.Sdl" Version="2.23.0" />
     </ItemGroup>
 
+    <ItemGroup>
+      <InternalsVisibleTo Include="Schreadt-Engine.Tests" />
+    </ItemGroup>
+
 </Project>

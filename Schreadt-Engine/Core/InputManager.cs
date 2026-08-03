@@ -221,7 +221,12 @@ public sealed class InputManager : IInputService, IDisposable
 
     private void OnKeyDown(IKeyboard keyboard, Key key, int scanCode)
     {
-        var inputKey = TranslateKey(key);
+        ProcessKeyDown(TranslateKey(key));
+    }
+
+    internal void ProcessKeyDown(InputKey inputKey)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (inputKey == InputKey.Unknown || _keysDown.Contains(inputKey)) return;
 
         var affectedActions = CaptureAffectedActionStates(InputBinding.ForKey(inputKey));
@@ -233,7 +238,12 @@ public sealed class InputManager : IInputService, IDisposable
 
     private void OnKeyUp(IKeyboard keyboard, Key key, int scanCode)
     {
-        var inputKey = TranslateKey(key);
+        ProcessKeyUp(TranslateKey(key));
+    }
+
+    internal void ProcessKeyUp(InputKey inputKey)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (inputKey == InputKey.Unknown) return;
 
         var affectedActions = CaptureAffectedActionStates(InputBinding.ForKey(inputKey));
@@ -245,13 +255,24 @@ public sealed class InputManager : IInputService, IDisposable
 
     private void OnKeyChar(IKeyboard keyboard, char character)
     {
+        ProcessCharacterTyped(character);
+    }
+
+    internal void ProcessCharacterTyped(char character)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _textInput.Append(character);
         CharacterTyped?.Invoke(character);
     }
 
     private void OnMouseDown(IMouse mouse, MouseButton button)
     {
-        var inputButton = TranslateMouseButton(button);
+        ProcessMouseDown(TranslateMouseButton(button));
+    }
+
+    internal void ProcessMouseDown(InputMouseButton inputButton)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (inputButton == InputMouseButton.Unknown || _mouseButtonsDown.Contains(inputButton)) return;
 
         var affectedActions = CaptureAffectedActionStates(InputBinding.ForMouseButton(inputButton));
@@ -263,7 +284,12 @@ public sealed class InputManager : IInputService, IDisposable
 
     private void OnMouseUp(IMouse mouse, MouseButton button)
     {
-        var inputButton = TranslateMouseButton(button);
+        ProcessMouseUp(TranslateMouseButton(button));
+    }
+
+    internal void ProcessMouseUp(InputMouseButton inputButton)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (inputButton == InputMouseButton.Unknown) return;
 
         var affectedActions = CaptureAffectedActionStates(InputBinding.ForMouseButton(inputButton));
@@ -275,6 +301,12 @@ public sealed class InputManager : IInputService, IDisposable
 
     private void OnMouseMove(IMouse mouse, Vector2 position)
     {
+        ProcessMouseMove(position);
+    }
+
+    internal void ProcessMouseMove(Vector2 position)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var delta = position - MousePosition;
         MousePosition = position;
         MouseDelta += delta;
@@ -283,7 +315,12 @@ public sealed class InputManager : IInputService, IDisposable
 
     private void OnScroll(IMouse mouse, ScrollWheel wheel)
     {
-        var delta = new Vector2(wheel.X, wheel.Y);
+        ProcessScroll(new Vector2(wheel.X, wheel.Y));
+    }
+
+    internal void ProcessScroll(Vector2 delta)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ScrollDelta += delta;
         Scrolled?.Invoke(delta);
     }

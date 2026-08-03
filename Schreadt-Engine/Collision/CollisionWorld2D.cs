@@ -15,6 +15,8 @@ public sealed class CollisionWorld2D
     public CollisionWorld2D()
     {
         RegisterNarrowPhase(new CircleCircleNarrowPhase2D());
+        RegisterNarrowPhase(new BoxBoxNarrowPhase2D());
+        RegisterNarrowPhase(new CircleBoxNarrowPhase2D());
     }
 
     public IReadOnlyList<Collider2D> Colliders => _colliders;

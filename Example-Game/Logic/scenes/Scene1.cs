@@ -30,10 +30,10 @@ public class Scene1 : SceneLogic
             RenderLayer = 10,
             Color = new Vector4D<float>(0.45f, 0.9f, 0.45f, 1.0f)
         };
-        var landmark = new Circle
+        var landmark = new Rectangle2D
         {
             Position = new Vector2D<double>(-1.35, -0.45),
-            Radius = 0.22,
+            Size = new Vector2D<double>(0.62, 0.2),
             Color = new Vector4D<float>(0.75f, 0.3f, 1.0f, 1.0f)
         };
         var fallingCircle = new Circle
@@ -101,7 +101,7 @@ public class Scene1 : SceneLogic
             CollisionLayer = ExampleCollisionLayers.Player,
             CollisionMask = ExampleCollisionLayers.PlayerMask
         });
-        landmark.AddComponent(new CircleCollider2D(landmark.Radius)
+        landmark.AddComponent(new AxisAlignedBoxCollider2D(landmark.Size)
         {
             CollisionLayer = ExampleCollisionLayers.World,
             CollisionMask = ExampleCollisionLayers.WorldMask
