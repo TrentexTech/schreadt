@@ -1,5 +1,6 @@
 using Example_Game.Logic;
 using Schreadt_Engine.Collision;
+using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Component.PreFab;
 using Schreadt_Engine.Core;
@@ -105,7 +106,7 @@ public class Scene0 : SceneLogic
             LinearDamping = 0.15,
             MaximumSpeed = 3.0
         });
-        fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius)
+        var fallingCollider = fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius)
         {
             CollisionLayer = ExampleCollisionLayers.Hazard,
             CollisionMask = ExampleCollisionLayers.HazardMask
@@ -122,6 +123,16 @@ public class Scene0 : SceneLogic
         Scene.AddChild(nonCollidingDecoration);
         Scene.Collisions.Gravity = new Vector2D<double>(0.0, _physicsTuning.Gravity);
 
-        State.CurrentReality.MainCamera.SetController(new FollowTargetCameraLogic(player));
+        var camera = State.CurrentReality.MainCamera;
+        camera.SetController(new FollowCameraController2D(player)
+        {
+            SmoothTime = 0.12,
+            DeadZone = new Vector2D<double>(0.18, 0.12)
+        });
+        var cameraShake = camera.GetComponent<CameraShake2D>() ?? camera.AddComponent(new CameraShake2D());
+        fallingCollider.CollisionEntered += contact =>
+        {
+            if (ReferenceEquals(contact.Other.Owner, player)) cameraShake.Shake(0.24, 0.045, 0.018);
+        };
     }
 }

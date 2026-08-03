@@ -7,8 +7,16 @@ public class Camera : GameObject
 {
     private double _orthographicSize = 1.0;
     private double _rotationRadians;
+    private Vector2D<double> _effectPositionOffset;
+    private double _effectRotationOffset;
 
     public CameraController? Controller => GetComponent<CameraController>();
+
+    public Vector2D<double> RenderPosition => Position + _effectPositionOffset;
+
+    public double RenderRotationRadians => RotationRadians + _effectRotationOffset;
+
+    public double ViewportAspectRatio { get; private set; } = 1.0;
 
     /// <summary>
     /// The number of world units visible from the center of the camera to the
@@ -84,7 +92,19 @@ public class Camera : GameObject
         if (!double.IsFinite(aspectRatio) || aspectRatio <= 0)
             throw new ArgumentOutOfRangeException(nameof(aspectRatio), "Aspect ratio must be finite and greater than zero.");
 
-        return new CameraView(Position, OrthographicSize, aspectRatio, RotationRadians);
+        ViewportAspectRatio = aspectRatio;
+        return new CameraView(RenderPosition, OrthographicSize, aspectRatio, RenderRotationRadians);
+    }
+
+    internal void SetEffectOffset(Vector2D<double> positionOffset, double rotationOffset)
+    {
+        if (!double.IsFinite(positionOffset.X) || !double.IsFinite(positionOffset.Y))
+            throw new ArgumentOutOfRangeException(nameof(positionOffset), "Camera effect offsets must be finite.");
+        if (!double.IsFinite(rotationOffset))
+            throw new ArgumentOutOfRangeException(nameof(rotationOffset), "Camera effect rotation must be finite.");
+
+        _effectPositionOffset = positionOffset;
+        _effectRotationOffset = rotationOffset;
     }
 }
 
