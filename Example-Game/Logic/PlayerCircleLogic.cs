@@ -33,7 +33,7 @@ public sealed class PlayerCircleLogic : ActorLogic
         var length = Math.Sqrt(movement.X * movement.X + movement.Y * movement.Y);
         if (length > 0) Actor.Move(movement * (MovementSpeed * dt / length));
 
-        if (input.WasActionPressed(ExampleInputActions.MoveToPointer))
+        if (input.WasActionPressed(ExampleInputActions.MoveToPointer) && !State.Gui.IsPointerCaptured)
         {
             Actor.Position = State.CurrentReality.MainCamera.ViewportToWorldPoint(
                 input.MouseViewportPosition,

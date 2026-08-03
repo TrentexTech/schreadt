@@ -30,6 +30,13 @@ public readonly record struct GuiRectangle
         : this(position.X, position.Y, size.X, size.Y)
     {
     }
+
+    public bool Contains(Vector2D<float> point)
+    {
+        return float.IsFinite(point.X) && float.IsFinite(point.Y) &&
+               point.X >= X && point.X <= X + Width &&
+               point.Y >= Y && point.Y <= Y + Height;
+    }
 }
 
 public interface IGuiElement

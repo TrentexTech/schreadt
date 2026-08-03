@@ -49,6 +49,8 @@ public sealed class GuiPanel : GuiElement
 
     public GuiLabel AddLabel(string text) => Add(new GuiLabel(text));
 
+    public GuiButton AddButton(string text) => Add(new GuiButton(text));
+
     public bool Remove(IGuiElement element)
     {
         ArgumentNullException.ThrowIfNull(element);

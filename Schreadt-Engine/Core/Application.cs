@@ -41,6 +41,7 @@ internal class Application
         {
             var timing = _physicsClock.Advance(dt);
 
+            Gui.Update(Input);
             Reality.UpdateGameplay(timing.FrameDeltaTime);
 
             for (var step = 0; step < timing.FixedStepCount; step++)

@@ -26,10 +26,7 @@ public class ExampleGameLogic : GameLogic
     {
         if (Input.WasActionPressed(ExampleInputActions.SwitchScene))
         {
-            var nextScene = Reality.Scenes.CurrentSceneName == MainScene
-                ? AlternateScene
-                : MainScene;
-            Reality.Scenes.LoadScene(nextScene);
+            SwitchScene();
         }
 
         var scroll = Input.ScrollDelta.Y;
@@ -77,5 +74,17 @@ public class ExampleGameLogic : GameLogic
         Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1(physicsTuning, Input));
         Reality.Scenes.LoadScene(MainScene);
         Reality.MainCamera.OrthographicSize = DefaultOrthographicSize;
+
+        var switchSceneButton = State.Gui.AddButton("SWITCH SCENE");
+        switchSceneButton.Position = new Silk.NET.Maths.Vector2D<float>(12.0f, 66.0f);
+        switchSceneButton.Clicked += (_, _) => SwitchScene();
+    }
+
+    private void SwitchScene()
+    {
+        var nextScene = Reality.Scenes.CurrentSceneName == MainScene
+            ? AlternateScene
+            : MainScene;
+        Reality.Scenes.LoadScene(nextScene);
     }
 }
