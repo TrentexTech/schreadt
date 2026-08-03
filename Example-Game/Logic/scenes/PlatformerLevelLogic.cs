@@ -119,10 +119,13 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         {
             Position = new Vector2D<double>(centerX, groundTop + 0.11)
         };
-        trigger.Collider.CollisionEntered += contact =>
+        void HandleSpikeContact(CollisionContact2D contact)
         {
             if (ReferenceEquals(contact.Other.Owner, _player)) _playerLogic.HitHazard();
-        };
+        }
+
+        trigger.Collider.CollisionEntered += HandleSpikeContact;
+        trigger.Collider.CollisionStayed += HandleSpikeContact;
         Scene.AddChild(trigger);
     }
 
@@ -167,10 +170,13 @@ internal abstract class PlatformerLevelLogic : SceneLogic
             Position = new Vector2D<double>(x, y),
             RenderLayer = 25
         };
-        enemy.Collider.CollisionEntered += contact =>
+        void HandleEnemyContact(CollisionContact2D contact)
         {
             if (ReferenceEquals(contact.Other.Owner, _player)) _playerLogic.HitHazard();
-        };
+        }
+
+        enemy.Collider.CollisionEntered += HandleEnemyContact;
+        enemy.Collider.CollisionStayed += HandleEnemyContact;
         Scene.AddChild(enemy);
     }
 
@@ -194,7 +200,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
     private void AddHud()
     {
         var panel = Scene.Gui.AddPanel();
-        panel.Position = new Vector2D<float>(1000, 12);
+        panel.Position = new Vector2D<float>(12, 575);
         panel.Padding = 8;
         panel.Spacing = 4;
         panel.BackgroundColor = new Vector4D<float>(0.035f, 0.055f, 0.11f, 0.88f);
