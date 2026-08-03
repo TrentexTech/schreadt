@@ -151,7 +151,7 @@ public sealed unsafe class Window : IWindowController
         EngineLog.Information(
             $"Loading SDL video and OpenGL 3.3 core window '{_title}' at {_size.X}x{_size.Y}.",
             "Window");
-        _sdl = SdlApi.GetApi();
+        _sdl = SdlApiLoader.GetApi();
         ThrowIfSdlError(_sdl.Init(SdlApi.InitVideo | SdlApi.InitEvents), "initialize SDL");
         _sdlInitialized = true;
 

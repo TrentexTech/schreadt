@@ -8,11 +8,6 @@
       "id": "example/physics-tuning",
       "path": "physics-tuning.json",
       "contentType": "application/json"
-    },
-    {
-      "id": "example/energy-beacon",
-      "path": "energy-beacon.png",
-      "contentType": "image/png"
     }
   ]
 }

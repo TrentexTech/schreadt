@@ -25,7 +25,7 @@ internal static class FatalErrorPresenter
         var message = CreateMessage(exception, logFilePath);
         try
         {
-            using var sdl = Sdl.GetApi();
+            using var sdl = SdlApiLoader.GetApi();
             return sdl.ShowSimpleMessageBox(
                 ErrorMessageBoxFlag,
                 "Schreadt Engine - Fatal Error",
