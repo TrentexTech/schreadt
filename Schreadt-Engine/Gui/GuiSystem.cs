@@ -5,10 +5,28 @@ namespace Schreadt_Engine.Gui;
 
 public sealed class GuiSystem
 {
+    public const float DefaultReferenceHeight = 720.0f;
+
     private readonly List<IGuiElement> _elements = [];
     private readonly List<GuiLayer> _layers = [];
+    private readonly float _referenceHeight;
     private GuiControl? _capturedControl;
     private GuiControl? _hoveredControl;
+    private Vector2D<float> _pointerPixelsPerGuiUnit = Vector2D<float>.One;
+    private Vector2D<int> _configuredFramebufferSize;
+
+    public GuiSystem(float referenceHeight = DefaultReferenceHeight)
+    {
+        if (!float.IsFinite(referenceHeight) || referenceHeight <= 0.0f)
+            throw new ArgumentOutOfRangeException(
+                nameof(referenceHeight),
+                "The GUI reference height must be finite and greater than zero.");
+
+        _referenceHeight = referenceHeight;
+    }
+
+    /// <summary>The logical viewport height at which GUI dimensions are used without scaling.</summary>
+    public float ReferenceHeight => _referenceHeight;
 
     /// <summary>Persistent GUI roots that are not owned by a scene.</summary>
     public IReadOnlyList<IGuiElement> Elements => _elements;
@@ -69,7 +87,9 @@ public sealed class GuiSystem
 
         if (input.WasKeyPressed(InputKey.Escape)) DismissTopScreenOnEscape();
 
-        var pointerPosition = new Vector2D<float>(input.MousePosition.X, input.MousePosition.Y);
+        var pointerPosition = new Vector2D<float>(
+            input.MousePosition.X / _pointerPixelsPerGuiUnit.X,
+            input.MousePosition.Y / _pointerPixelsPerGuiUnit.Y);
         var hoveredControl = FindTopmostControl(pointerPosition);
         SetHoveredControl(hoveredControl);
 
@@ -98,15 +118,36 @@ public sealed class GuiSystem
     public void Render(IRenderContext2D renderer)
     {
         ArgumentNullException.ThrowIfNull(renderer);
-        var viewportSize = new Vector2D<float>(renderer.ViewportSize.X, renderer.ViewportSize.Y);
+        var renderScale = GetRenderScale(renderer.ViewportSize);
+        if (renderer.ViewportSize != _configuredFramebufferSize)
+            _pointerPixelsPerGuiUnit = new Vector2D<float>(renderScale, renderScale);
+
+        var viewportSize = new Vector2D<float>(
+            renderer.ViewportSize.X / renderScale,
+            renderer.ViewportSize.Y / renderScale);
+        var scaledRenderer = new ScaledGuiRenderContext(renderer, renderScale);
 
         foreach (var layer in _layers.ToArray())
         {
             if (!layer.Visible || !_layers.Contains(layer)) continue;
-            foreach (var root in layer.EnumerateRoots().ToArray()) RenderRoot(root, viewportSize, renderer);
+            foreach (var root in layer.EnumerateRoots().ToArray()) RenderRoot(root, viewportSize, scaledRenderer);
         }
 
-        foreach (var element in _elements.ToArray()) RenderRoot(element, viewportSize, renderer);
+        foreach (var element in _elements.ToArray()) RenderRoot(element, viewportSize, scaledRenderer);
+    }
+
+    internal void SetViewportSizes(Vector2D<int> framebufferSize, Vector2D<int> windowSize)
+    {
+        if (framebufferSize.X <= 0 || framebufferSize.Y <= 0)
+            throw new ArgumentOutOfRangeException(nameof(framebufferSize), "Framebuffer dimensions must be positive.");
+        if (windowSize.X <= 0 || windowSize.Y <= 0)
+            throw new ArgumentOutOfRangeException(nameof(windowSize), "Window dimensions must be positive.");
+
+        var renderScale = GetRenderScale(framebufferSize);
+        _configuredFramebufferSize = framebufferSize;
+        _pointerPixelsPerGuiUnit = new Vector2D<float>(
+            renderScale * windowSize.X / framebufferSize.X,
+            renderScale * windowSize.Y / framebufferSize.Y);
     }
 
     internal void ReleaseInteraction(IGuiElement root)
@@ -137,6 +178,11 @@ public sealed class GuiSystem
         element.Measure(availableSize);
         element.Arrange(new GuiRectangle(element.Position, element.DesiredSize));
         element.Render(renderer);
+    }
+
+    private float GetRenderScale(Vector2D<int> viewportSize)
+    {
+        return Math.Max(1, viewportSize.Y) / _referenceHeight;
     }
 
     private GuiControl? FindTopmostControl(Vector2D<float> pointerPosition)
@@ -255,4 +301,52 @@ public sealed class GuiSystem
     }
 
     private readonly record struct ScreenSearchResult(GuiControl? Control, bool BlocksInputBelow);
+
+    private sealed class ScaledGuiRenderContext(IRenderContext2D inner, float scale) : IRenderContext2D
+    {
+        public Vector2D<int> ViewportSize => inner.ViewportSize;
+
+        public void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color) =>
+            inner.DrawCircle(center, radius, color);
+
+        public void DrawRectangle(
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> color,
+            double rotationRadians = 0.0) =>
+            inner.DrawRectangle(center, size, color, rotationRadians);
+
+        public void DrawPolygon(
+            Vector2D<double> center,
+            IReadOnlyList<Vector2D<double>> localVertices,
+            Vector2D<double> polygonScale,
+            double rotationRadians,
+            Vector4D<float> color) =>
+            inner.DrawPolygon(center, localVertices, polygonScale, rotationRadians, color);
+
+        public void DrawSprite(
+            string imageAssetId,
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> tint,
+            double rotationRadians = 0.0,
+            TextureRegion? region = null,
+            TextureSampling sampling = TextureSampling.Linear) =>
+            inner.DrawSprite(imageAssetId, center, size, tint, rotationRadians, region, sampling);
+
+        public void DrawText(
+            string text,
+            Vector2D<float> position,
+            float textScale,
+            Vector4D<float> color,
+            Vector4D<float> backgroundColor,
+            float padding = 0.0f) =>
+            inner.DrawText(text, position * scale, textScale * scale, color, backgroundColor, padding * scale);
+
+        public void DrawScreenRectangle(
+            Vector2D<float> position,
+            Vector2D<float> size,
+            Vector4D<float> color) =>
+            inner.DrawScreenRectangle(position * scale, size * scale, color);
+    }
 }

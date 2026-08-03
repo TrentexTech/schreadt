@@ -18,7 +18,7 @@ internal class Application
     {
         Input = new InputManager();
         State.SetInput(Input);
-        Gui = new GuiSystem();
+        Gui = new GuiSystem(Config.Data.Window.DefaultSize.Height);
         State.SetGui(Gui);
         _performanceOverlay = new PerformanceOverlay(Gui);
         Runtime = new RuntimeController();

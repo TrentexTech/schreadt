@@ -294,8 +294,10 @@ public sealed unsafe class Window : IWindowController
     private void ResizeRenderer()
     {
         var framebufferSize = FramebufferSize;
+        var windowSize = Size;
         EngineLog.Debug($"Framebuffer resized to {framebufferSize.X}x{framebufferSize.Y}.", "Window");
         _renderer?.Resize(framebufferSize.X, framebufferSize.Y);
+        _app.Gui.SetViewportSizes(framebufferSize, windowSize);
     }
 
     private void Close()
