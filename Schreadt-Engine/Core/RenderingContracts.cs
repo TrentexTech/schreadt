@@ -4,6 +4,12 @@ using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Core;
 
+/// <summary>Work submitted during the most recently completed rendered frame.</summary>
+public readonly record struct RenderStatistics(
+    int DrawCallCount,
+    int PrimitiveCount,
+    int VertexCount);
+
 /// <summary>
 /// Receives backend-independent two-dimensional draw commands.
 /// </summary>
@@ -70,6 +76,8 @@ public interface IRenderer2D : IPixelRenderContext2D, IDisposable
 {
     /// <summary>Top-left framebuffer offset of the aspect-ratio-constrained viewport.</summary>
     Vector2D<int> ViewportOffset { get; }
+
+    RenderStatistics Statistics { get; }
 
     void Render(Camera camera, GameObject obj, GuiSystem? gui = null);
     void Resize(int width, int height);

@@ -1,4 +1,5 @@
 using Schreadt_Engine.Core;
+using Schreadt_Engine.Collision;
 using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
 
@@ -22,9 +23,39 @@ public sealed class PerformanceOverlayTests
         Assert.Equal(viewportWidth - 12.0f, panel.Position.X + panel.Size.X, 3);
     }
 
+    [Fact]
+    public void Update_ReportsRenderingSimulationPhysicsAndMemoryMetrics()
+    {
+        var gui = new GuiSystem();
+        var overlay = new PerformanceOverlay(gui);
+        var runtime = new RuntimeController();
+        var renderer = new RecordingRenderContext(1280, 720);
+
+        overlay.Update(
+            1.0 / 60.0,
+            runtime,
+            fixedStepCount: 2,
+            new CollisionStatistics2D(10, 8, 3, 28, 12, 2),
+            new RenderStatistics(14, 92, 276),
+            renderer.ViewportSize);
+        gui.Render(renderer);
+
+        var text = Assert.Single(renderer.Texts);
+        Assert.Contains("FPS: 60.0", text);
+        Assert.Contains("FRAME: 16.67 MS", text);
+        Assert.Contains("DRAW: 14  PRIM: 92  VERT: 276", text);
+        Assert.Contains("SIM: RUNNING  FIXED: 2  SCALE: 1.00", text);
+        Assert.Contains("PHYS: 8/10  CONTACT: 2", text);
+        Assert.Contains("CHECKS: 28 PAIR  12 NARROW", text);
+        Assert.Contains("VIEW: 1280X720", text);
+        Assert.Contains("MEM:", text);
+        Assert.Contains("GC:", text);
+    }
+
     private sealed class RecordingRenderContext(int width, int height) : IRenderContext2D
     {
         internal List<(Vector2D<float> Position, Vector2D<float> Size)> ScreenRectangles { get; } = [];
+        internal List<string> Texts { get; } = [];
 
         public Vector2D<int> ViewportSize { get; } = new(width, height);
 
@@ -68,6 +99,7 @@ public sealed class PerformanceOverlayTests
             Vector4D<float> backgroundColor,
             float padding = 0.0f)
         {
+            Texts.Add(text);
         }
 
         public void DrawScreenRectangle(

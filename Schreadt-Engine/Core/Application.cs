@@ -7,6 +7,7 @@ internal class Application
 {
     private readonly PerformanceOverlay _performanceOverlay;
     private bool _shutdown;
+    private int _lastFixedStepCount;
 
     internal readonly Window Window;
     internal readonly InputManager Input;
@@ -56,6 +57,7 @@ internal class Application
             Reality.ProcessPendingSceneChange();
 
             var timing = Runtime.Advance(dt);
+            _lastFixedStepCount = timing.FixedStepCount;
             if (!timing.ShouldUpdateSimulation) return;
 
             Reality.UpdateGameplay(timing.FrameDeltaTime);
@@ -77,7 +79,13 @@ internal class Application
     {
         if (_shutdown || Window.IsCloseRequested) return;
 
-        _performanceOverlay.Update(frameTime);
+        _performanceOverlay.Update(
+            frameTime,
+            Runtime,
+            _lastFixedStepCount,
+            Reality.Scene.Collisions.Statistics,
+            renderer.Statistics,
+            renderer.ViewportSize);
         Reality.Render(renderer, Gui);
     }
 

@@ -117,10 +117,15 @@ public sealed class Renderer : IRenderer2D
     private TextureSampling? _pixelTextureSampling;
     private int _pixelBufferWidth;
     private int _pixelBufferHeight;
+    private int _frameDrawCallCount;
+    private int _framePrimitiveCount;
+    private int _frameVertexCount;
 
     public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
     public Vector2D<int> ViewportSize => new(_viewportWidth, _viewportHeight);
+
+    public RenderStatistics Statistics { get; private set; }
 
     public Renderer(GL gl, IAssetProvider? assets = null, double targetAspectRatio = 16.0 / 9.0)
     {
@@ -174,6 +179,9 @@ public sealed class Renderer : IRenderer2D
         ArgumentNullException.ThrowIfNull(obj);
 
         _cameraView = camera.CreateView((double)_viewportWidth / _viewportHeight);
+        _frameDrawCallCount = 0;
+        _framePrimitiveCount = 0;
+        _frameVertexCount = 0;
         _renderingFrame = true;
 
         try
@@ -188,6 +196,10 @@ public sealed class Renderer : IRenderer2D
         finally
         {
             _renderingFrame = false;
+            Statistics = new RenderStatistics(
+                _frameDrawCallCount,
+                _framePrimitiveCount,
+                _frameVertexCount);
         }
     }
 
@@ -258,7 +270,7 @@ public sealed class Renderer : IRenderer2D
         _gl.Uniform4(_colorUniform, color.X, color.Y, color.Z, color.W);
 
         _gl.BindVertexArray(_circleVertexArray);
-        _gl.DrawArrays(PrimitiveType.TriangleFan, 0, (uint)_circleVertexCount);
+        DrawArrays(PrimitiveType.TriangleFan, _circleVertexCount);
         _gl.BindVertexArray(0);
     }
 
@@ -354,7 +366,7 @@ public sealed class Renderer : IRenderer2D
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, texture.Handle);
         _gl.BindVertexArray(_spriteVertexArray);
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        DrawArrays(PrimitiveType.Triangles, 6);
         _gl.BindVertexArray(0);
         _gl.BindTexture(TextureTarget.Texture2D, 0);
     }
@@ -521,7 +533,7 @@ public sealed class Renderer : IRenderer2D
         _gl.Uniform4(_spriteRegionUniform, 0.0f, 0.0f, 1.0f, 1.0f);
         _gl.Uniform4(_spriteTintUniform, 1.0f, 1.0f, 1.0f, 1.0f);
         _gl.BindVertexArray(_spriteVertexArray);
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        DrawArrays(PrimitiveType.Triangles, 6);
         _gl.BindVertexArray(0);
         _gl.BindTexture(TextureTarget.Texture2D, 0);
     }
@@ -827,9 +839,23 @@ public sealed class Renderer : IRenderer2D
                 BufferUsageARB.DynamicDraw);
         }
 
-        _gl.DrawArrays(primitiveType, 0, (uint)(vertexData.Length / 2));
+        DrawArrays(primitiveType, vertexData.Length / 2);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
         _gl.BindVertexArray(0);
+    }
+
+    private void DrawArrays(PrimitiveType primitiveType, int vertexCount)
+    {
+        _gl.DrawArrays(primitiveType, 0, (uint)vertexCount);
+        _frameDrawCallCount++;
+        _frameVertexCount += vertexCount;
+        _framePrimitiveCount += primitiveType switch
+        {
+            PrimitiveType.Triangles => vertexCount / 3,
+            PrimitiveType.TriangleFan => Math.Max(0, vertexCount - 2),
+            PrimitiveType.Lines => vertexCount / 2,
+            _ => 0
+        };
     }
 
     private static List<float> SelectGridBatch(

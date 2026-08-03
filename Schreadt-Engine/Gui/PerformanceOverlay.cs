@@ -1,4 +1,6 @@
 using Silk.NET.Maths;
+using Schreadt_Engine.Collision;
+using Schreadt_Engine.Core;
 
 namespace Schreadt_Engine.Gui;
 
@@ -8,6 +10,14 @@ internal sealed class PerformanceOverlay
 
     private readonly GuiLabel _label;
     private double _smoothedFrameTime;
+    private double _rangeElapsed;
+    private double _minimumFrameTime = double.PositiveInfinity;
+    private double _maximumFrameTime;
+    private double _memorySampleElapsed = 1.0;
+    private double _memoryMegabytes;
+    private int _generationZeroCollections;
+    private int _generationOneCollections;
+    private int _generationTwoCollections;
 
     internal PerformanceOverlay(GuiSystem gui)
     {
@@ -18,17 +28,53 @@ internal sealed class PerformanceOverlay
         _label.BackgroundColor = Vector4D<float>.Zero;
     }
 
-    internal void Update(double frameTime)
+    internal void Update(
+        double frameTime,
+        RuntimeController runtime,
+        int fixedStepCount,
+        CollisionStatistics2D collisions,
+        RenderStatistics rendering,
+        Vector2D<int> viewportSize)
     {
         if (!double.IsFinite(frameTime) || frameTime <= 0) return;
+        ArgumentNullException.ThrowIfNull(runtime);
 
         _smoothedFrameTime = _smoothedFrameTime <= 0
             ? frameTime
             : _smoothedFrameTime + (frameTime - _smoothedFrameTime) * SmoothingFactor;
+        _rangeElapsed += frameTime;
+        _minimumFrameTime = Math.Min(_minimumFrameTime, frameTime);
+        _maximumFrameTime = Math.Max(_maximumFrameTime, frameTime);
+        _memorySampleElapsed += frameTime;
+        if (_memorySampleElapsed >= 1.0)
+        {
+            _memorySampleElapsed %= 1.0;
+            _memoryMegabytes = GC.GetTotalMemory(forceFullCollection: false) / (1024.0 * 1024.0);
+            _generationZeroCollections = GC.CollectionCount(0);
+            _generationOneCollections = GC.CollectionCount(1);
+            _generationTwoCollections = GC.CollectionCount(2);
+        }
 
         var framesPerSecond = 1.0 / _smoothedFrameTime;
         var milliseconds = _smoothedFrameTime * 1000.0;
-        _label.Text = FormattableString.Invariant($"FPS: {framesPerSecond:F1}\nFRAME: {milliseconds:F2} MS");
+        var minimumMilliseconds = _minimumFrameTime * 1000.0;
+        var maximumMilliseconds = _maximumFrameTime * 1000.0;
+        var simulationState = runtime.IsPaused ? "PAUSED" : "RUNNING";
+        _label.Text = FormattableString.Invariant($"""
+            FPS: {framesPerSecond:F1}
+            FRAME: {milliseconds:F2} MS  RANGE: {minimumMilliseconds:F2}-{maximumMilliseconds:F2}
+            DRAW: {rendering.DrawCallCount}  PRIM: {rendering.PrimitiveCount}  VERT: {rendering.VertexCount}
+            SIM: {simulationState}  FIXED: {fixedStepCount}  SCALE: {runtime.TimeScale:F2}
+            PHYS: {collisions.ActiveColliderCount}/{collisions.RegisteredColliderCount}  CONTACT: {collisions.ContactCount}
+            CHECKS: {collisions.PairCheckCount} PAIR  {collisions.NarrowPhaseTestCount} NARROW
+            VIEW: {viewportSize.X}X{viewportSize.Y}
+            MEM: {_memoryMegabytes:F1} MB  GC: {_generationZeroCollections}/{_generationOneCollections}/{_generationTwoCollections}
+            """);
+
+        if (_rangeElapsed < 1.0) return;
+        _rangeElapsed %= 1.0;
+        _minimumFrameTime = double.PositiveInfinity;
+        _maximumFrameTime = 0.0;
     }
 
     private sealed class PerformanceOverlayRoot : GuiElement
@@ -44,7 +90,10 @@ internal sealed class PerformanceOverlay
 
         internal PerformanceOverlayRoot()
         {
-            Label = _panel.AddLabel("FPS: --\nFRAME: -- MS");
+            Label = _panel.AddLabel(
+                "FPS: --\nFRAME: -- MS  RANGE: --\nDRAW: --  PRIM: --  VERT: --\n" +
+                "SIM: --  FIXED: --  SCALE: --\nPHYS: --  CONTACT: --\nCHECKS: --\n" +
+                "VIEW: --\nMEM: --  GC: --");
         }
 
         protected override Vector2D<float> OnMeasure(Vector2D<float> availableSize)
