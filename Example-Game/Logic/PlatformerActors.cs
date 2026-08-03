@@ -50,7 +50,9 @@ internal sealed class PlatformerPlayerLogic : ActorLogic
         _coyoteTimer = _groundContacts.Count > 0 ? CoyoteTime : Math.Max(0, _coyoteTimer - dt);
         _jumpBufferTimer = Math.Max(0, _jumpBufferTimer - dt);
 
-        if (_input.WasActionPressed(ExampleInputActions.Jump)) _jumpBufferTimer = JumpBufferTime;
+        // Refreshing the buffer while jump is held makes landing immediately
+        // start the next jump without losing coyote time or short-hop control.
+        if (_input.IsActionDown(ExampleInputActions.Jump)) _jumpBufferTimer = JumpBufferTime;
 
         var direction = 0.0;
         if (_input.IsActionDown(ExampleInputActions.MoveLeft)) direction -= 1.0;
