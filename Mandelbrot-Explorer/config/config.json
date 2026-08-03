@@ -1,0 +1,9 @@
+{
+  "window": {
+    "title": "Mandelbrot Explorer - Schreadt Engine Demo",
+    "default-size": {
+      "width": 1920,
+      "height": 1080
+    }
+  }
+}
