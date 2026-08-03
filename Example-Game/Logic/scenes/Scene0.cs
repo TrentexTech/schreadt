@@ -10,10 +10,12 @@ namespace Example_Game.Logic.scenes;
 public class Scene0 : SceneLogic
 {
     private readonly ExamplePhysicsTuning _physicsTuning;
+    private readonly IInputState _input;
 
-    public Scene0(ExamplePhysicsTuning physicsTuning)
+    public Scene0(ExamplePhysicsTuning physicsTuning, IInputState input)
     {
         _physicsTuning = physicsTuning;
+        _input = input;
     }
 
     public override void Update(double dt)
@@ -22,7 +24,7 @@ public class Scene0 : SceneLogic
 
     public override void Init()
     {
-        var player = new Circle(new PlayerCircleLogic());
+        var player = new Circle(new PlayerCircleLogic(_input));
         var landmark = new Circle
         {
             Position = new Vector2D<double>(1.2, 0.45),

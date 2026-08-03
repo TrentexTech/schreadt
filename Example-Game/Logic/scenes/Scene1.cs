@@ -10,10 +10,12 @@ namespace Example_Game.Logic.scenes;
 public class Scene1 : SceneLogic
 {
     private readonly ExamplePhysicsTuning _physicsTuning;
+    private readonly IInputState _input;
 
-    public Scene1(ExamplePhysicsTuning physicsTuning)
+    public Scene1(ExamplePhysicsTuning physicsTuning, IInputState input)
     {
         _physicsTuning = physicsTuning;
+        _input = input;
     }
 
     public override void Update(double dt)
@@ -22,7 +24,7 @@ public class Scene1 : SceneLogic
 
     public override void Init()
     {
-        var player = new Circle(new PlayerCircleLogic())
+        var player = new Circle(new PlayerCircleLogic(_input))
         {
             Position = new Vector2D<double>(-0.6, 0.0),
             Color = new Vector4D<float>(0.45f, 0.9f, 0.45f, 1.0f)

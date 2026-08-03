@@ -2,7 +2,6 @@ using Example_Game.Logic.scenes;
 using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Core;
-using Silk.NET.Input;
 
 namespace Example_Game.Logic;
 
@@ -14,10 +13,18 @@ public class ExampleGameLogic : GameLogic
     private const double MinimumOrthographicSize = 0.25;
     private const double MaximumOrthographicSize = 8.0;
     private const double ZoomFactorPerScrollStep = 0.85;
+    private readonly IInputService? _input;
+
+    private IInputService Input => _input ?? State.Input;
+
+    public ExampleGameLogic(IInputService? input = null)
+    {
+        _input = input;
+    }
 
     public override void Update(double dt)
     {
-        if (State.Input.WasKeyPressed(Key.Tab))
+        if (Input.WasActionPressed(ExampleInputActions.SwitchScene))
         {
             var nextScene = Reality.Scenes.CurrentSceneName == MainScene
                 ? AlternateScene
@@ -25,7 +32,7 @@ public class ExampleGameLogic : GameLogic
             Reality.Scenes.LoadScene(nextScene);
         }
 
-        var scroll = State.Input.ScrollDelta.Y;
+        var scroll = Input.ScrollDelta.Y;
         if (scroll == 0)
         {
             return;
@@ -41,10 +48,33 @@ public class ExampleGameLogic : GameLogic
 
     public override void Init()
     {
+        Input.SetActionBindings(
+            ExampleInputActions.MoveUp,
+            InputBinding.ForKey(InputKey.W),
+            InputBinding.ForKey(InputKey.Up));
+        Input.SetActionBindings(
+            ExampleInputActions.MoveDown,
+            InputBinding.ForKey(InputKey.S),
+            InputBinding.ForKey(InputKey.Down));
+        Input.SetActionBindings(
+            ExampleInputActions.MoveLeft,
+            InputBinding.ForKey(InputKey.A),
+            InputBinding.ForKey(InputKey.Left));
+        Input.SetActionBindings(
+            ExampleInputActions.MoveRight,
+            InputBinding.ForKey(InputKey.D),
+            InputBinding.ForKey(InputKey.Right));
+        Input.SetActionBindings(
+            ExampleInputActions.MoveToPointer,
+            InputBinding.ForMouseButton(InputMouseButton.Left));
+        Input.SetActionBindings(
+            ExampleInputActions.SwitchScene,
+            InputBinding.ForKey(InputKey.Tab));
+
         State.Assets.RegisterDecoder(new JsonAssetDecoder<ExamplePhysicsTuning>());
         var physicsTuning = State.Assets.Get<ExamplePhysicsTuning>("example/physics-tuning");
-        Reality.Scenes.RegisterScene(MainScene, () => new Scene0(physicsTuning));
-        Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1(physicsTuning));
+        Reality.Scenes.RegisterScene(MainScene, () => new Scene0(physicsTuning, Input));
+        Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1(physicsTuning, Input));
         Reality.Scenes.LoadScene(MainScene);
         Reality.MainCamera.OrthographicSize = DefaultOrthographicSize;
     }
