@@ -72,7 +72,7 @@ public sealed class TriggerZone2D : Actor
         return _overlappingColliders.Any(collider => ReferenceEquals(collider.Owner, gameObject));
     }
 
-    protected override void OnRender(Renderer renderer)
+    protected override void OnRender(IRenderContext2D renderer)
     {
         if (Visible) renderer.DrawCircle(Position + Collider.Offset, Radius, Color);
     }

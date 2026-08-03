@@ -14,7 +14,7 @@ public class Circle : Actor
     {
     }
 
-    protected override void OnRender(Renderer renderer)
+    protected override void OnRender(IRenderContext2D renderer)
     {
         renderer.DrawCircle(Position, Radius, Color);
     }

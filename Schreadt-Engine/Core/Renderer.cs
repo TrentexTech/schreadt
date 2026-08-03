@@ -6,7 +6,7 @@ using Silk.NET.OpenGL;
 
 namespace Schreadt_Engine.Core;
 
-public sealed class Renderer : IDisposable
+public sealed class Renderer : IRenderer2D
 {
     private const int CircleSegmentCount = 96;
     private const int MaximumGridLineCount = 2048;
@@ -298,29 +298,41 @@ public sealed class Renderer : IDisposable
         return texture;
     }
 
-    internal void DrawGuiLabel(GuiLabel label)
+    public void DrawText(
+        string text,
+        Vector2D<float> position,
+        float scale,
+        Vector4D<float> color,
+        Vector4D<float> backgroundColor,
+        float padding = 0.0f)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(label);
+        ArgumentNullException.ThrowIfNull(text);
         if (!_renderingFrame) throw new InvalidOperationException("GUI drawing must occur while rendering a frame.");
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y))
+            throw new ArgumentOutOfRangeException(nameof(position), "Text position must be finite.");
+        if (!float.IsFinite(scale) || scale <= 0.0f)
+            throw new ArgumentOutOfRangeException(nameof(scale), "Text scale must be finite and greater than zero.");
+        if (!float.IsFinite(padding) || padding < 0.0f)
+            throw new ArgumentOutOfRangeException(nameof(padding), "Text padding must be finite and non-negative.");
 
-        var lines = label.Text.Replace("\r", string.Empty).Split('\n');
+        var lines = text.Replace("\r", string.Empty).Split('\n');
         var longestLine = lines.Max(line => line.Length);
-        var textWidth = Math.Max(0.0f, (longestLine * BitmapFont5x7.CharacterAdvance - 1) * label.Scale);
-        var textHeight = Math.Max(0.0f, (lines.Length * BitmapFont5x7.LineAdvance - 1) * label.Scale);
-        var textX = label.Position.X + label.Padding;
-        var textY = label.Position.Y + label.Padding;
+        var textWidth = Math.Max(0.0f, (longestLine * BitmapFont5x7.CharacterAdvance - 1) * scale);
+        var textHeight = Math.Max(0.0f, (lines.Length * BitmapFont5x7.LineAdvance - 1) * scale);
+        var textX = position.X + padding;
+        var textY = position.Y + padding;
 
-        if (label.BackgroundColor.W > 0)
+        if (backgroundColor.W > 0)
         {
             var backgroundVertices = new List<float>(12);
             AddScreenQuad(
                 backgroundVertices,
-                label.Position.X,
-                label.Position.Y,
-                textWidth + label.Padding * 2.0f,
-                textHeight + label.Padding * 2.0f);
-            DrawDynamicBatch(backgroundVertices, label.BackgroundColor, PrimitiveType.Triangles);
+                position.X,
+                position.Y,
+                textWidth + padding * 2.0f,
+                textHeight + padding * 2.0f);
+            DrawDynamicBatch(backgroundVertices, backgroundColor, PrimitiveType.Triangles);
         }
 
         var glyphVertices = new List<float>();
@@ -332,8 +344,8 @@ public sealed class Renderer : IDisposable
             for (var characterIndex = 0; characterIndex < line.Length; characterIndex++)
             {
                 var glyph = BitmapFont5x7.GetGlyph(line[characterIndex]);
-                var glyphX = textX + characterIndex * BitmapFont5x7.CharacterAdvance * label.Scale;
-                var glyphY = textY + lineIndex * BitmapFont5x7.LineAdvance * label.Scale;
+                var glyphX = textX + characterIndex * BitmapFont5x7.CharacterAdvance * scale;
+                var glyphY = textY + lineIndex * BitmapFont5x7.LineAdvance * scale;
 
                 for (var row = 0; row < BitmapFont5x7.GlyphHeight; row++)
                 {
@@ -344,16 +356,16 @@ public sealed class Renderer : IDisposable
 
                         AddScreenQuad(
                             glyphVertices,
-                            glyphX + column * label.Scale,
-                            glyphY + row * label.Scale,
-                            label.Scale,
-                            label.Scale);
+                            glyphX + column * scale,
+                            glyphY + row * scale,
+                            scale,
+                            scale);
                     }
                 }
             }
         }
 
-        DrawDynamicBatch(glyphVertices, label.Color, PrimitiveType.Triangles);
+        DrawDynamicBatch(glyphVertices, color, PrimitiveType.Triangles);
     }
 
     public void Dispose()

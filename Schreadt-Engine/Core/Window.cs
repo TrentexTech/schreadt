@@ -10,7 +10,7 @@ public class Window
 {
     private Application _app;
     private readonly IWindow _window;
-    private Renderer? _renderer;
+    private IRenderer2D? _renderer;
 
     internal Window(Application app)
     {

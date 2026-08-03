@@ -42,7 +42,7 @@ public class Polygon : Actor
         _readOnlyVertices = Array.AsReadOnly(_vertices);
     }
 
-    protected override void OnRender(Renderer renderer)
+    protected override void OnRender(IRenderContext2D renderer)
     {
         renderer.DrawPolygon(Position, _vertices, Scale, RotationRadians, Color);
     }

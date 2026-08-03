@@ -37,7 +37,7 @@ public class Rectangle2D : Actor
     {
     }
 
-    protected override void OnRender(Renderer renderer)
+    protected override void OnRender(IRenderContext2D renderer)
     {
         renderer.DrawRectangle(Position, Size, Color, RotationRadians);
     }

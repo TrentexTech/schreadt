@@ -53,7 +53,7 @@ public class Reality : IUpdateable
         MainCamera.Update(dt);
     }
 
-    public void Render(Renderer renderer, GuiSystem? gui = null)
+    public void Render(IRenderer2D renderer, GuiSystem? gui = null)
     {
         renderer.Render(MainCamera, Scene, gui);
     }

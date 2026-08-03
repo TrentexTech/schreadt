@@ -19,7 +19,7 @@ public class Sprite : Actor
         ImageAssetId = imageAssetId;
     }
 
-    protected override void OnRender(Renderer renderer)
+    protected override void OnRender(IRenderContext2D renderer)
     {
         renderer.DrawSprite(
             ImageAssetId,

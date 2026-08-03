@@ -107,7 +107,7 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
         _initialized = false;
     }
 
-    public void Render(Renderer renderer)
+    public void Render(IRenderContext2D renderer)
     {
         ArgumentNullException.ThrowIfNull(renderer);
         EnsureInitialized();
@@ -234,7 +234,7 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     {
     }
 
-    protected virtual void OnRender(Renderer renderer)
+    protected virtual void OnRender(IRenderContext2D renderer)
     {
     }
     
@@ -302,5 +302,5 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
 
 public interface IRenderable
 {
-    void Render(Renderer renderer);
+    void Render(IRenderContext2D renderer);
 }

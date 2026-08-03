@@ -56,7 +56,7 @@ internal class Application
         }
     }
 
-    internal void Render(Renderer renderer, double frameTime)
+    internal void Render(IRenderer2D renderer, double frameTime)
     {
         _performanceOverlay.Update(frameTime);
         Reality.Render(renderer, Gui);

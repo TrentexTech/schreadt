@@ -21,11 +21,22 @@ public sealed class GuiSystem
         return _labels.Remove(label);
     }
 
-    internal void Render(Renderer renderer)
+    public void Render(IRenderContext2D renderer)
     {
+        ArgumentNullException.ThrowIfNull(renderer);
+
         foreach (var label in _labels.ToArray())
         {
-            if (label.Visible) renderer.DrawGuiLabel(label);
+            if (label.Visible)
+            {
+                renderer.DrawText(
+                    label.Text,
+                    label.Position,
+                    label.Scale,
+                    label.Color,
+                    label.BackgroundColor,
+                    label.Padding);
+            }
         }
     }
 }
