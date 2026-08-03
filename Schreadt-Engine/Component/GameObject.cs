@@ -16,6 +16,17 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
 
     public bool Active { get; set; } = true;
 
+    /// <summary>
+    /// Broad rendering group. Lower layers are drawn first and therefore appear behind higher layers.
+    /// </summary>
+    public int RenderLayer { get; set; }
+
+    /// <summary>
+    /// Ordering within <see cref="RenderLayer"/>. Lower values are drawn first.
+    /// Equal values preserve hierarchy traversal and insertion order.
+    /// </summary>
+    public int RenderOrder { get; set; }
+
     public bool Initialized => _initialized;
 
     public GameObject? Parent => _parent;
@@ -113,11 +124,14 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
         EnsureInitialized();
         if (!Active) return;
 
-        OnRender(renderer);
+        var renderEntries = new List<RenderEntry>();
+        long sequence = 0;
+        CollectRenderEntries(renderEntries, ref sequence);
+        renderEntries.Sort(RenderEntryComparer.Instance);
 
-        foreach (var child in _children.ToArray())
+        foreach (var entry in renderEntries)
         {
-            if (ReferenceEquals(child.Parent, this)) child.Render(renderer);
+            if (entry.Object.CanRenderWithin(this)) entry.Object.OnRender(renderer);
         }
     }
 
@@ -253,6 +267,28 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
         if (!_initialized) throw new InvalidOperationException($"{GetType().Name} must be initialized before it can be updated or rendered.");
     }
 
+    private void CollectRenderEntries(List<RenderEntry> entries, ref long sequence)
+    {
+        if (!Active) return;
+
+        entries.Add(new RenderEntry(this, sequence++));
+        foreach (var child in _children.ToArray())
+        {
+            if (ReferenceEquals(child.Parent, this)) child.CollectRenderEntries(entries, ref sequence);
+        }
+    }
+
+    private bool CanRenderWithin(GameObject renderRoot)
+    {
+        for (GameObject? current = this; current is not null; current = current.Parent)
+        {
+            if (!current._initialized || !current.Active) return false;
+            if (ReferenceEquals(current, renderRoot)) return true;
+        }
+
+        return false;
+    }
+
     internal void AttachToScene(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -297,6 +333,22 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
         foreach (var child in _children.ToArray()) child.DetachFromScene();
         foreach (var component in _components.ToArray()) scene.UnregisterComponent(component);
         _scene = null;
+    }
+
+    private readonly record struct RenderEntry(GameObject Object, long Sequence);
+
+    private sealed class RenderEntryComparer : IComparer<RenderEntry>
+    {
+        internal static RenderEntryComparer Instance { get; } = new();
+
+        public int Compare(RenderEntry first, RenderEntry second)
+        {
+            var layerComparison = first.Object.RenderLayer.CompareTo(second.Object.RenderLayer);
+            if (layerComparison != 0) return layerComparison;
+
+            var orderComparison = first.Object.RenderOrder.CompareTo(second.Object.RenderOrder);
+            return orderComparison != 0 ? orderComparison : first.Sequence.CompareTo(second.Sequence);
+        }
     }
 }
 

@@ -27,6 +27,7 @@ public class Scene1 : SceneLogic
         var player = new Circle(new PlayerCircleLogic(_input))
         {
             Position = new Vector2D<double>(-0.6, 0.0),
+            RenderLayer = 10,
             Color = new Vector4D<float>(0.45f, 0.9f, 0.45f, 1.0f)
         };
         var landmark = new Circle
@@ -45,12 +46,14 @@ public class Scene1 : SceneLogic
         {
             Position = new Vector2D<double>(0.75, 0.65),
             Radius = 0.24,
+            RenderLayer = -20,
             Color = new Vector4D<float>(1.0f, 0.55f, 0.2f, 0.65f)
         };
         var energyBeacon = new Sprite("example/energy-beacon")
         {
             Position = new Vector2D<double>(0.65, -0.4),
             Size = new Vector2D<double>(0.6, 0.6),
+            RenderLayer = -30,
             RotationRadians = 0.12,
             Tint = new Vector4D<float>(0.8f, 0.95f, 1.0f, 0.9f)
         };
@@ -58,6 +61,7 @@ public class Scene1 : SceneLogic
         {
             Position = new Vector2D<double>(1.35, -0.65),
             Size = new Vector2D<double>(0.58, 0.22),
+            RenderLayer = -20,
             RotationRadians = -0.2,
             Color = new Vector4D<float>(0.25f, 0.8f, 0.95f, 0.85f)
         };
@@ -73,12 +77,14 @@ public class Scene1 : SceneLogic
         {
             Position = new Vector2D<double>(1.35, -0.28),
             Scale = new Vector2D<double>(0.32, 0.32),
+            RenderLayer = -20,
             RotationRadians = 0.16,
             Color = new Vector4D<float>(0.65f, 0.35f, 1.0f, 0.9f)
         };
         var checkpoint = new TriggerZone2D(0.32)
         {
             Position = new Vector2D<double>(0.15, 0.15),
+            RenderLayer = -10,
             Color = new Vector4D<float>(0.75f, 0.3f, 1.0f, 0.25f),
             Filter = candidate => ReferenceEquals(candidate, player)
         };
