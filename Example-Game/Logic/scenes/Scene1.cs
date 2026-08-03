@@ -24,6 +24,7 @@ public class Scene1 : SceneLogic
 
     public override void Init()
     {
+        ExampleGameScreens.AddSceneHud(Scene, "ALTERNATE");
         var player = new Circle(new PlayerCircleLogic(_input))
         {
             Position = new Vector2D<double>(-0.6, 0.0),

@@ -1,5 +1,7 @@
 using Schreadt_Engine.Collision;
 using Schreadt_Engine.Component.Logic;
+using Schreadt_Engine.Core;
+using Schreadt_Engine.Gui;
 
 namespace Schreadt_Engine.Component;
 
@@ -11,12 +13,15 @@ public class Scene : GameObject
     public SceneLogic Logic { get; }
     public CollisionWorld2D Collisions { get; } = new();
     public GridBackground2D? Background { get; set; } = new();
+    public GuiLayer Gui { get; } = new();
+    public GuiScreenStack Screens => Gui.Screens;
 
-    internal Scene(string name, SceneLogic logic)
+    internal Scene(string name, SceneLogic logic, RuntimeController? runtime = null)
     {
         Name = name;
         Logic = logic;
         Logic.Attach(this);
+        Screens.SetRuntime(runtime);
         AttachToScene(this);
     }
 
@@ -57,6 +62,8 @@ public class Scene : GameObject
         Shutdown();
         DetachFromScene();
         Collisions.Clear();
+        Gui.Clear();
+        Screens.SetRuntime(null);
         _unloaded = true;
     }
 }

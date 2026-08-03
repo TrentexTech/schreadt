@@ -7,6 +7,8 @@ public sealed class RuntimeController
 {
     private readonly FixedStepClock _physicsClock = new();
     private bool _isPaused;
+    private bool _manualPause;
+    private int _pauseRequestCount;
     private bool _singleStepPending;
     private double _timeScale = 1.0;
 
@@ -40,27 +42,21 @@ public sealed class RuntimeController
 
     public void Pause()
     {
-        if (_isPaused) return;
-
-        _isPaused = true;
-        _singleStepPending = false;
-        _physicsClock.Reset();
-        PauseStateChanged?.Invoke(true);
+        if (_manualPause) return;
+        _manualPause = true;
+        RefreshPauseState();
     }
 
     public void Resume()
     {
-        if (!_isPaused) return;
-
-        _isPaused = false;
-        _singleStepPending = false;
-        _physicsClock.Reset();
-        PauseStateChanged?.Invoke(false);
+        if (!_manualPause) return;
+        _manualPause = false;
+        RefreshPauseState();
     }
 
     public void TogglePause()
     {
-        if (_isPaused) Resume();
+        if (_manualPause) Resume();
         else Pause();
     }
 
@@ -71,6 +67,20 @@ public sealed class RuntimeController
             throw new InvalidOperationException("Single-step is only available while the runtime is paused.");
 
         _singleStepPending = true;
+    }
+
+    internal void AcquirePauseRequest()
+    {
+        _pauseRequestCount = checked(_pauseRequestCount + 1);
+        RefreshPauseState();
+    }
+
+    internal void ReleasePauseRequest()
+    {
+        if (_pauseRequestCount <= 0)
+            throw new InvalidOperationException("There is no runtime pause request to release.");
+        _pauseRequestCount--;
+        RefreshPauseState();
     }
 
     internal RuntimeFrameTiming Advance(double frameDeltaTime)
@@ -101,6 +111,17 @@ public sealed class RuntimeController
         DeltaTime = timing.FrameDeltaTime;
 
         return new RuntimeFrameTiming(DeltaTime, timing.FixedStepCount, true);
+    }
+
+    private void RefreshPauseState()
+    {
+        var paused = _manualPause || _pauseRequestCount > 0;
+        if (_isPaused == paused) return;
+
+        _isPaused = paused;
+        _singleStepPending = false;
+        _physicsClock.Reset();
+        PauseStateChanged?.Invoke(paused);
     }
 }
 

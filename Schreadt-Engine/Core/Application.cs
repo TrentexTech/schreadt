@@ -21,10 +21,10 @@ internal class Application
         Gui = new GuiSystem();
         State.SetGui(Gui);
         _performanceOverlay = new PerformanceOverlay(Gui);
-        Reality = new Reality(gameLogic);
-        State.SetCurrentReality(Reality);
         Runtime = new RuntimeController();
         State.SetRuntime(Runtime);
+        Reality = new Reality(gameLogic, Gui, Runtime);
+        State.SetCurrentReality(Reality);
         Window = new Window(this);
         State.SetWindow(Window);
     }
@@ -45,6 +45,8 @@ internal class Application
         {
             Gui.Update(Input);
             if (_shutdown || Window.IsCloseRequested) return;
+
+            Reality.ProcessPendingSceneChange();
 
             var timing = Runtime.Advance(dt);
             if (!timing.ShouldUpdateSimulation) return;

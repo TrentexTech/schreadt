@@ -1,5 +1,6 @@
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
+using Schreadt_Engine.Gui;
 
 namespace Schreadt_Engine.Core;
 
@@ -9,6 +10,8 @@ namespace Schreadt_Engine.Core;
 public sealed class SceneManager
 {
     private readonly Dictionary<string, Func<SceneLogic>> _sceneFactories = new(StringComparer.Ordinal);
+    private readonly GuiSystem? _gui;
+    private readonly RuntimeController? _runtime;
     private string? _pendingSceneName;
     private bool _initialized;
 
@@ -21,6 +24,12 @@ public sealed class SceneManager
     public event Action<Scene>? SceneLoaded;
 
     public event Action<Scene>? SceneUnloaded;
+
+    public SceneManager(GuiSystem? gui = null, RuntimeController? runtime = null)
+    {
+        _gui = gui;
+        _runtime = runtime;
+    }
 
     public void RegisterScene(string name, Func<SceneLogic> factory)
     {
@@ -85,6 +94,12 @@ public sealed class SceneManager
         CurrentScene!.Update(dt);
     }
 
+    internal void ProcessPendingSceneChange()
+    {
+        if (!_initialized) throw new InvalidOperationException("The scene manager has not been initialized.");
+        ApplyPendingSceneChange();
+    }
+
     internal void FixedUpdate(double dt)
     {
         if (!_initialized) throw new InvalidOperationException("The scene manager has not been initialized.");
@@ -103,6 +118,7 @@ public sealed class SceneManager
         var scene = CurrentScene;
         CurrentScene = null;
         scene.Unload();
+        _gui?.RemoveLayer(scene.Gui);
         SceneUnloaded?.Invoke(scene);
     }
 
@@ -116,9 +132,10 @@ public sealed class SceneManager
         var factory = _sceneFactories[sceneName];
         var logic = factory()
             ?? throw new InvalidOperationException($"The factory for scene '{sceneName}' returned null.");
-        var nextScene = new Scene(sceneName, logic);
+        var nextScene = new Scene(sceneName, logic, _runtime);
         var previousScene = CurrentScene;
 
+        _gui?.AddLayer(nextScene.Gui);
         CurrentScene = nextScene;
         try
         {
@@ -127,12 +144,15 @@ public sealed class SceneManager
         catch
         {
             CurrentScene = previousScene;
+            nextScene.Unload();
+            _gui?.RemoveLayer(nextScene.Gui);
             throw;
         }
 
         if (previousScene is not null)
         {
             previousScene.Unload();
+            _gui?.RemoveLayer(previousScene.Gui);
             SceneUnloaded?.Invoke(previousScene);
         }
 

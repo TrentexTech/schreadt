@@ -24,6 +24,7 @@ public class Scene0 : SceneLogic
 
     public override void Init()
     {
+        ExampleGameScreens.AddSceneHud(Scene, "MAIN");
         var player = new Circle(new PlayerCircleLogic(_input));
         player.RenderLayer = 10;
         var landmark = new Rectangle2D

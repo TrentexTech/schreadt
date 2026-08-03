@@ -87,7 +87,7 @@ public class ExampleGameLogic : GameLogic
         var pauseButton = controls.AddButton("PAUSE");
         var stepButton = controls.AddButton("STEP ONE FRAME");
         stepButton.Enabled = false;
-        pauseButton.Clicked += (_, _) => State.Runtime.TogglePause();
+        pauseButton.Clicked += (_, _) => TogglePauseScreen();
         State.Runtime.PauseStateChanged += paused =>
         {
             pauseButton.Text = paused ? "RESUME" : "PAUSE";
@@ -134,9 +134,17 @@ public class ExampleGameLogic : GameLogic
 
     private void SwitchScene()
     {
+        Reality.Scene.Screens.Clear();
         var nextScene = Reality.Scenes.CurrentSceneName == MainScene
             ? AlternateScene
             : MainScene;
         Reality.Scenes.LoadScene(nextScene);
+    }
+
+    private void TogglePauseScreen()
+    {
+        var scene = Reality.Scene;
+        if (scene.Screens.Remove(ExampleGameScreens.PauseScreenName)) return;
+        scene.Screens.Push(ExampleGameScreens.CreatePauseScreen(scene));
     }
 }
