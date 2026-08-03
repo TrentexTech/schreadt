@@ -1,6 +1,46 @@
-bin/
-obj/
-/packages/
+# Build output
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Dd]ebug/
+[Rr]elease/
+[Tt]est[Rr]esults/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# JetBrains Rider and ReSharper
+.idea/
+*.DotSettings.user
+_ReSharper.Caches/
+*.sln.iml
 riderModule.iml
-/_ReSharper.Caches/
-/.vs/
+
+# NuGet packages and generated packages
+packages/
+*.nupkg
+*.snupkg
+
+# Coverage, profiling, and logs
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+*.trx
+*.log
+
+# Local tooling and temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

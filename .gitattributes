@@ -1,0 +1,43 @@
+# Normalize text in the repository so Windows and Unix checkouts produce stable diffs.
+* text=auto
+
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+.editorconfig  text eol=lf
+*.cs          text eol=lf
+*.csproj      text eol=lf
+*.props       text eol=lf
+*.targets     text eol=lf
+*.sln         text eol=lf
+*.slnx        text eol=lf
+*.json        text eol=lf
+*.xml         text eol=lf
+*.config      text eol=lf
+*.md          text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.glsl        text eol=lf
+*.vert        text eol=lf
+*.frag        text eol=lf
+*.ps1         text eol=lf
+*.sh          text eol=lf
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+
+# Binary game assets must never undergo line-ending conversion.
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.bmp         binary
+*.tga         binary
+*.webp        binary
+*.ico         binary
+*.wav         binary
+*.ogg         binary
+*.mp3         binary
+*.ttf         binary
+*.otf         binary
+*.dll         binary
+*.pdb         binary
+*.nupkg       binary
