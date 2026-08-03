@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Example-Game\Example-Game.csproj" />
     <ProjectReference Include="..\Mandelbrot-Explorer\Mandelbrot-Explorer.csproj" />
     <ProjectReference Include="..\Schreadt-Engine\Schreadt-Engine.csproj" />
   </ItemGroup>

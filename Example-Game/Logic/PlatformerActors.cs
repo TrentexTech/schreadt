@@ -1,3 +1,4 @@
+using Schreadt_Engine.Animation.Tweening;
 using Schreadt_Engine.Collision;
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
@@ -176,7 +177,11 @@ internal sealed class StarToken : Actor
     [
         new(0, 0.27), new(-0.085, 0.045), new(0.085, 0.045)
     ];
-    private double _time;
+    private readonly TweenPlayer _tweens;
+    private Vector2D<double> _visualScale = Vector2D<double>.One;
+    private double _rotation;
+    private float _opacity = 1.0f;
+    private bool _collected;
 
     internal CircleCollider2D Collider { get; }
 
@@ -188,32 +193,72 @@ internal sealed class StarToken : Actor
             CollisionLayer = ExampleCollisionLayers.Collectible,
             CollisionMask = ExampleCollisionLayers.PlayerOnlyMask
         });
+        _tweens = AddComponent(new TweenPlayer());
+
+        var pulse = Tweens.To(
+            () => _visualScale,
+            value => _visualScale = value,
+            new Vector2D<double>(1.12, 1.12),
+            0.6);
+        pulse.Easing = TweenEasings.SineInOut;
+        pulse.LoopMode = TweenLoopMode.Yoyo;
+        pulse.RepeatCount = Tween.RepeatForever;
+        _tweens.Play(pulse);
+
+        var spin = Tweens.To(() => _rotation, value => _rotation = value, Math.Tau, 6.0);
+        spin.RepeatCount = Tween.RepeatForever;
+        _tweens.Play(spin);
     }
 
-    protected override void OnUpdate(double dt)
+    internal bool Collect()
     {
-        base.OnUpdate(dt);
-        _time += dt;
+        if (_collected) return false;
+
+        _collected = true;
+        Collider.Enabled = false;
+        _tweens.Clear();
+
+        var rise = Tweens.To(
+            () => Position,
+            value => Position = value,
+            Position + new Vector2D<double>(0.0, 0.38),
+            0.3);
+        rise.Easing = TweenEasings.CubicOut;
+
+        var shrink = Tweens.To(
+            () => _visualScale,
+            value => _visualScale = value,
+            new Vector2D<double>(0.12, 0.12),
+            0.3);
+        shrink.Easing = TweenEasings.QuadraticIn;
+
+        var fade = Tweens.To(() => _opacity, value => _opacity = value, 0.0f, 0.3);
+        fade.Easing = TweenEasings.QuadraticIn;
+
+        _tweens.Play(Tweens.Sequence(
+            Tweens.Parallel(rise, shrink, fade),
+            Tweens.Callback(() => Active = false)));
+        return true;
     }
 
     protected override void OnRender(IRenderContext2D renderer)
     {
-        var pulse = 0.28 + Math.Sin(_time * 4.2) * 0.025;
-        var rotation = _time * 0.8;
-        var color = new Vector4D<float>(1f, 0.84f, 0.18f, 1f);
-        renderer.DrawCircle(Position, pulse, new Vector4D<float>(1f, 0.78f, 0.1f, 0.18f));
+        var scale = _visualScale.X;
+        var color = new Vector4D<float>(1f, 0.84f, 0.18f, _opacity);
+        renderer.DrawCircle(Position, 0.28 * scale, new Vector4D<float>(1f, 0.78f, 0.1f, 0.18f * _opacity));
         for (var ray = 0; ray < 5; ray++)
         {
-            renderer.DrawPolygon(Position, StarRay, Vector2D<double>.One,
-                rotation + ray * Math.PI * 2.0 / 5.0, color);
+            renderer.DrawPolygon(Position, StarRay, _visualScale,
+                _rotation + ray * Math.PI * 2.0 / 5.0, color);
         }
-        renderer.DrawCircle(Position, 0.105, color);
+        renderer.DrawCircle(Position, 0.105 * scale, color);
     }
 }
 
 internal sealed class GoalPortal : Actor
 {
-    private double _time;
+    private double _pulse;
+    private double _orbitAngle;
     internal CircleCollider2D Collider { get; }
 
     internal GoalPortal()
@@ -224,21 +269,25 @@ internal sealed class GoalPortal : Actor
             CollisionLayer = ExampleCollisionLayers.Goal,
             CollisionMask = ExampleCollisionLayers.PlayerOnlyMask
         });
-    }
+        var tweens = AddComponent(new TweenPlayer());
 
-    protected override void OnUpdate(double dt)
-    {
-        base.OnUpdate(dt);
-        _time += dt;
+        var pulse = Tweens.To(() => _pulse, value => _pulse = value, 0.025, 0.55);
+        pulse.Easing = TweenEasings.SineInOut;
+        pulse.LoopMode = TweenLoopMode.Yoyo;
+        pulse.RepeatCount = Tween.RepeatForever;
+        tweens.Play(pulse);
+
+        var orbit = Tweens.To(() => _orbitAngle, value => _orbitAngle = value, Math.Tau, 3.0);
+        orbit.RepeatCount = Tween.RepeatForever;
+        tweens.Play(orbit);
     }
 
     protected override void OnRender(IRenderContext2D renderer)
     {
-        var pulse = Math.Sin(_time * 3.5) * 0.025;
-        renderer.DrawCircle(Position, 0.5 + pulse, new Vector4D<float>(0.35f, 0.95f, 1f, 0.2f));
-        renderer.DrawCircle(Position, 0.39 + pulse, new Vector4D<float>(0.26f, 0.82f, 1f, 0.8f));
+        renderer.DrawCircle(Position, 0.5 + _pulse, new Vector4D<float>(0.35f, 0.95f, 1f, 0.2f));
+        renderer.DrawCircle(Position, 0.39 + _pulse, new Vector4D<float>(0.26f, 0.82f, 1f, 0.8f));
         renderer.DrawCircle(Position, 0.27, new Vector4D<float>(0.06f, 0.12f, 0.3f, 1f));
-        renderer.DrawCircle(Position + new Vector2D<double>(0.08 * Math.Sin(_time * 2), 0.08 * Math.Cos(_time * 2)),
+        renderer.DrawCircle(Position + new Vector2D<double>(0.08 * Math.Sin(_orbitAngle), 0.08 * Math.Cos(_orbitAngle)),
             0.055, new Vector4D<float>(1f, 0.9f, 0.35f, 1f));
     }
 }

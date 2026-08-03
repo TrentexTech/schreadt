@@ -138,8 +138,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         };
         star.Collider.CollisionEntered += contact =>
         {
-            if (!star.Active || !ReferenceEquals(contact.Other.Owner, _player)) return;
-            star.Active = false;
+            if (!ReferenceEquals(contact.Other.Owner, _player) || !star.Collect()) return;
             _stars++;
             UpdateStats();
         };
@@ -148,6 +147,9 @@ internal abstract class PlatformerLevelLogic : SceneLogic
 
     protected void AddGoal(double x, double y)
     {
+        AddPortalShard(x - 0.55, y + 0.05, -0.18, 0.2);
+        AddPortalShard(x + 0.55, y + 0.05, 0.18, -0.2);
+
         var portal = new GoalPortal
         {
             Position = new Vector2D<double>(x, y),
@@ -161,6 +163,20 @@ internal abstract class PlatformerLevelLogic : SceneLogic
             else PlatformerScreens.ShowVictory(Scene, _stars, _playerLogic.Deaths);
         };
         Scene.AddChild(portal);
+    }
+
+    private void AddPortalShard(double x, double y, double rotation, double sway)
+    {
+        var shard = new Rectangle2D
+        {
+            Position = new Vector2D<double>(x, y),
+            Size = new Vector2D<double>(0.1, 0.7),
+            RotationRadians = rotation,
+            RenderLayer = 19,
+            Color = new Vector4D<float>(0.42f, 0.9f, 1f, 0.72f)
+        };
+        ExampleTweens.AddPanelSway(shard, sway);
+        Scene.AddChild(shard);
     }
 
     protected void AddEnemy(double x, double y, double minimumX, double maximumX, double speed)

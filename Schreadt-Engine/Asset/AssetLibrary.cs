@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace Schreadt_Engine.Asset;
 
 public abstract class AssetLibrary : IAssetSource
