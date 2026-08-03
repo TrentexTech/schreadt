@@ -66,6 +66,7 @@ public class Scene1 : SceneLogic
             RotationRadians = -0.2,
             Color = new Vector4D<float>(0.25f, 0.8f, 0.95f, 0.85f)
         };
+        ExampleTweens.AddPanelSway(tiltedPanel, -0.18);
         var hexagon = new Polygon(
         [
             new Vector2D<double>(0.5, 0.0),

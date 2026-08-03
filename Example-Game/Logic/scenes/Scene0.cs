@@ -61,6 +61,7 @@ public class Scene0 : SceneLogic
             RotationRadians = 0.18,
             Color = new Vector4D<float>(0.95f, 0.3f, 0.45f, 0.85f)
         };
+        ExampleTweens.AddPanelSway(tiltedPanel, 0.18);
         var markerTriangle = new Triangle
         {
             Position = new Vector2D<double>(-1.35, -0.28),
