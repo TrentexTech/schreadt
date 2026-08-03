@@ -83,15 +83,14 @@ public static class EngineLog
             }
         }
 
-        if (level >= EngineLogLevel.Warning)
+        try
         {
-            try
-            {
-                Console.Error.WriteLine(formatted);
-            }
-            catch
-            {
-            }
+            if (level >= EngineLogLevel.Warning) Console.Error.WriteLine(formatted);
+            else Console.Out.WriteLine(formatted);
+        }
+        catch
+        {
+            // A redirected or unavailable console must not affect the engine.
         }
 
         try
