@@ -8,22 +8,16 @@ public readonly record struct CollisionContact2D(
     Vector2D<double> Normal,
     double Penetration);
 
-public abstract class Collider2D
+public abstract class Collider2D : GameComponent
 {
     private static long _nextId;
+    private RigidBody2D? _body;
 
     internal long Id { get; } = Interlocked.Increment(ref _nextId);
     internal CollisionWorld2D? World { get; set; }
 
-    protected Collider2D(RigidBody2D body)
-    {
-        ArgumentNullException.ThrowIfNull(body);
-        Body = body;
-    }
-
-    public RigidBody2D Body { get; }
-
-    public GameObject Owner => Body.Owner;
+    public RigidBody2D Body => _body
+        ?? throw new InvalidOperationException("The collider is not attached to a rigid body.");
 
     public CollisionBodyType2D BodyType
     {
@@ -46,17 +40,23 @@ public abstract class Collider2D
     internal void NotifyStayed(CollisionContact2D contact) => CollisionStayed?.Invoke(contact);
 
     internal void NotifyExited(CollisionContact2D contact) => CollisionExited?.Invoke(contact);
+
+    protected override void OnAttached()
+    {
+        _body = Owner.GetComponent<RigidBody2D>() ?? Owner.AddComponent(new RigidBody2D());
+    }
+
+    protected override void OnDetached()
+    {
+        _body = null;
+    }
 }
 
 public sealed class CircleCollider2D : Collider2D
 {
     private double _radius;
 
-    public CircleCollider2D(GameObject owner, double radius) : this(new RigidBody2D(owner), radius)
-    {
-    }
-
-    public CircleCollider2D(RigidBody2D body, double radius) : base(body)
+    public CircleCollider2D(double radius)
     {
         Radius = radius;
     }

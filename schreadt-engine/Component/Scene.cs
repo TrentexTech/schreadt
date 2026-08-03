@@ -17,6 +17,17 @@ public class Scene : GameObject
         Name = name;
         Logic = logic;
         Logic.Attach(this);
+        AttachToScene(this);
+    }
+
+    internal void RegisterComponent(GameComponent component)
+    {
+        if (component is Collider2D collider) Collisions.AddCollider(collider);
+    }
+
+    internal void UnregisterComponent(GameComponent component)
+    {
+        if (component is Collider2D collider) Collisions.RemoveCollider(collider);
     }
 
     protected override void OnInit()
@@ -34,6 +45,7 @@ public class Scene : GameObject
         if (_unloaded) return;
 
         Logic.Unload();
+        DetachFromScene();
         Collisions.Clear();
         _unloaded = true;
     }

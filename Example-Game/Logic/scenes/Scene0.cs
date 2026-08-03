@@ -34,23 +34,23 @@ public class Scene0 : SceneLogic
             Radius = 0.25,
             Color = new Vector4D<float>(0.2f, 0.85f, 0.75f, 0.65f)
         };
-        var playerBody = new RigidBody2D(player)
+        player.AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Kinematic
-        };
-        var fallingBody = new RigidBody2D(fallingCircle)
+        });
+        player.AddComponent(new CircleCollider2D(player.Radius));
+        landmark.AddComponent(new CircleCollider2D(landmark.Radius));
+        fallingCircle.AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Dynamic
-        };
+        });
+        fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius));
 
         Scene.AddChild(player);
         Scene.AddChild(landmark);
         Scene.AddChild(fallingCircle);
         Scene.AddChild(nonCollidingDecoration);
         Scene.Collisions.Gravity = new Vector2D<double>(0.0, -2.5);
-        Scene.Collisions.AddCollider(new CircleCollider2D(playerBody, player.Radius));
-        Scene.Collisions.AddCollider(new CircleCollider2D(landmark, landmark.Radius));
-        Scene.Collisions.AddCollider(new CircleCollider2D(fallingBody, fallingCircle.Radius));
 
         State.CurrentReality.MainCamera.InitLogic(new FollowTargetCameraLogic(player));
     }

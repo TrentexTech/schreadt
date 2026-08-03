@@ -25,7 +25,7 @@ public sealed class CollisionWorld2D
         }
     }
 
-    public void AddCollider(Collider2D collider)
+    internal void AddCollider(Collider2D collider)
     {
         ArgumentNullException.ThrowIfNull(collider);
 
@@ -45,7 +45,7 @@ public sealed class CollisionWorld2D
         _bodies.Add(collider.Body);
     }
 
-    public bool RemoveCollider(Collider2D collider)
+    internal bool RemoveCollider(Collider2D collider)
     {
         ArgumentNullException.ThrowIfNull(collider);
 
