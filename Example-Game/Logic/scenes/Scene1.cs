@@ -57,6 +57,7 @@ public class Scene1 : SceneLogic
             RotationRadians = 0.12,
             Tint = new Vector4D<float>(0.8f, 0.95f, 1.0f, 0.9f)
         };
+        ExampleSpriteAnimations.AddBeaconPulse(energyBeacon);
         var tiltedPanel = new Rectangle2D
         {
             Position = new Vector2D<double>(1.35, -0.65),

@@ -28,6 +28,23 @@ public readonly record struct TextureRegion(float Left, float Top, float Right, 
 {
     public static TextureRegion Full { get; } = new(0.0f, 0.0f, 1.0f, 1.0f);
 
+    /// <summary>Creates a normalized region for one cell in a uniformly divided sprite sheet.</summary>
+    public static TextureRegion FromGridCell(int column, int row, int columns, int rows)
+    {
+        if (columns <= 0) throw new ArgumentOutOfRangeException(nameof(columns), "Column count must be greater than zero.");
+        if (rows <= 0) throw new ArgumentOutOfRangeException(nameof(rows), "Row count must be greater than zero.");
+        if (column < 0 || column >= columns) throw new ArgumentOutOfRangeException(nameof(column));
+        if (row < 0 || row >= rows) throw new ArgumentOutOfRangeException(nameof(row));
+
+        var cellWidth = 1.0f / columns;
+        var cellHeight = 1.0f / rows;
+        return new TextureRegion(
+            column * cellWidth,
+            row * cellHeight,
+            (column + 1) * cellWidth,
+            (row + 1) * cellHeight);
+    }
+
     public void Validate()
     {
         if (!float.IsFinite(Left) || !float.IsFinite(Top) || !float.IsFinite(Right) || !float.IsFinite(Bottom) ||

@@ -52,6 +52,7 @@ public class Scene0 : SceneLogic
             RenderLayer = -30,
             RotationRadians = -0.08
         };
+        ExampleSpriteAnimations.AddBeaconPulse(energyBeacon);
         var tiltedPanel = new Rectangle2D
         {
             Position = new Vector2D<double>(-1.35, -0.65),

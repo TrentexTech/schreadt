@@ -1,10 +1,11 @@
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Core;
+using Schreadt_Engine.Animation;
 using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Component.PreFab;
 
-public class Sprite : Actor
+public class Sprite : Actor, ISpriteRegionTarget
 {
     public string ImageAssetId { get; }
     public Vector2D<double> Size { get; set; } = new(1.0, 1.0);
