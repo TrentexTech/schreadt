@@ -21,6 +21,8 @@ public sealed class InputManager : IInputService, IDisposable
 
     private IWindowController? _view;
     private SdlApi? _sdl;
+    private Vector2 _viewportPosition;
+    private Vector2 _viewportSize;
     private bool _disposed;
 
     public bool Available => _sdl is not null;
@@ -39,12 +41,17 @@ public sealed class InputManager : IInputService, IDisposable
     {
         get
         {
-            var size = _view?.Size ?? default;
+            var size = _viewportSize;
+            if (size.X <= 0 || size.Y <= 0)
+            {
+                var windowSize = _view?.Size ?? default;
+                size = new Vector2(windowSize.X, windowSize.Y);
+            }
             if (size.X <= 0 || size.Y <= 0) return new Vector2D<double>(0.5, 0.5);
 
             return new Vector2D<double>(
-                MousePosition.X / size.X,
-                1.0 - MousePosition.Y / size.Y);
+                (MousePosition.X - _viewportPosition.X) / size.X,
+                1.0 - (MousePosition.Y - _viewportPosition.Y) / size.Y);
         }
     }
 
@@ -52,8 +59,11 @@ public sealed class InputManager : IInputService, IDisposable
     {
         get
         {
-            var size = _view?.Size ?? default;
-            return size.X > 0 && size.Y > 0 ? (double)size.X / size.Y : 1.0;
+            var size = _viewportSize;
+            if (size.X > 0 && size.Y > 0) return size.X / size.Y;
+
+            var windowSize = _view?.Size ?? default;
+            return windowSize.X > 0 && windowSize.Y > 0 ? (double)windowSize.X / windowSize.Y : 1.0;
         }
     }
 
@@ -166,6 +176,24 @@ public sealed class InputManager : IInputService, IDisposable
         _textInput.Clear();
         MouseDelta = Vector2.Zero;
         ScrollDelta = Vector2.Zero;
+    }
+
+    internal void SetViewportSizes(
+        Vector2D<int> framebufferSize,
+        Vector2D<int> windowSize,
+        Vector2D<int> viewportOffset,
+        Vector2D<int> viewportSize)
+    {
+        var framebufferWidth = Math.Max(1, framebufferSize.X);
+        var framebufferHeight = Math.Max(1, framebufferSize.Y);
+        var windowWidth = Math.Max(1, windowSize.X);
+        var windowHeight = Math.Max(1, windowSize.Y);
+        _viewportPosition = new Vector2(
+            viewportOffset.X * (float)windowWidth / framebufferWidth,
+            viewportOffset.Y * (float)windowHeight / framebufferHeight);
+        _viewportSize = new Vector2(
+            viewportSize.X * (float)windowWidth / framebufferWidth,
+            viewportSize.Y * (float)windowHeight / framebufferHeight);
     }
 
     public void Dispose()

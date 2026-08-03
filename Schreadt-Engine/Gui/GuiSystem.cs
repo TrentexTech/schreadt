@@ -12,8 +12,9 @@ public sealed class GuiSystem
     private readonly float _referenceHeight;
     private GuiControl? _capturedControl;
     private GuiControl? _hoveredControl;
+    private Vector2D<float> _pointerViewportOffset;
     private Vector2D<float> _pointerPixelsPerGuiUnit = Vector2D<float>.One;
-    private Vector2D<int> _configuredFramebufferSize;
+    private Vector2D<int> _configuredViewportSize;
 
     public GuiSystem(float referenceHeight = DefaultReferenceHeight)
     {
@@ -88,8 +89,8 @@ public sealed class GuiSystem
         if (input.WasKeyPressed(InputKey.Escape)) DismissTopScreenOnEscape();
 
         var pointerPosition = new Vector2D<float>(
-            input.MousePosition.X / _pointerPixelsPerGuiUnit.X,
-            input.MousePosition.Y / _pointerPixelsPerGuiUnit.Y);
+            (input.MousePosition.X - _pointerViewportOffset.X) / _pointerPixelsPerGuiUnit.X,
+            (input.MousePosition.Y - _pointerViewportOffset.Y) / _pointerPixelsPerGuiUnit.Y);
         var hoveredControl = FindTopmostControl(pointerPosition);
         SetHoveredControl(hoveredControl);
 
@@ -119,8 +120,11 @@ public sealed class GuiSystem
     {
         ArgumentNullException.ThrowIfNull(renderer);
         var renderScale = GetRenderScale(renderer.ViewportSize);
-        if (renderer.ViewportSize != _configuredFramebufferSize)
+        if (renderer.ViewportSize != _configuredViewportSize)
+        {
+            _pointerViewportOffset = Vector2D<float>.Zero;
             _pointerPixelsPerGuiUnit = new Vector2D<float>(renderScale, renderScale);
+        }
 
         var viewportSize = new Vector2D<float>(
             renderer.ViewportSize.X / renderScale,
@@ -136,18 +140,24 @@ public sealed class GuiSystem
         foreach (var element in _elements.ToArray()) RenderRoot(element, viewportSize, scaledRenderer);
     }
 
-    internal void SetViewportSizes(Vector2D<int> framebufferSize, Vector2D<int> windowSize)
+    internal void SetViewportSizes(
+        Vector2D<int> framebufferSize,
+        Vector2D<int> windowSize,
+        Vector2D<int> viewportOffset,
+        Vector2D<int> viewportSize)
     {
-        if (framebufferSize.X <= 0 || framebufferSize.Y <= 0)
-            throw new ArgumentOutOfRangeException(nameof(framebufferSize), "Framebuffer dimensions must be positive.");
-        if (windowSize.X <= 0 || windowSize.Y <= 0)
-            throw new ArgumentOutOfRangeException(nameof(windowSize), "Window dimensions must be positive.");
-
-        var renderScale = GetRenderScale(framebufferSize);
-        _configuredFramebufferSize = framebufferSize;
+        var framebufferWidth = Math.Max(1, framebufferSize.X);
+        var framebufferHeight = Math.Max(1, framebufferSize.Y);
+        var windowWidth = Math.Max(1, windowSize.X);
+        var windowHeight = Math.Max(1, windowSize.Y);
+        var renderScale = GetRenderScale(viewportSize);
+        _configuredViewportSize = viewportSize;
+        _pointerViewportOffset = new Vector2D<float>(
+            viewportOffset.X * (float)windowWidth / framebufferWidth,
+            viewportOffset.Y * (float)windowHeight / framebufferHeight);
         _pointerPixelsPerGuiUnit = new Vector2D<float>(
-            renderScale * windowSize.X / framebufferSize.X,
-            renderScale * windowSize.Y / framebufferSize.Y);
+            renderScale * windowWidth / framebufferWidth,
+            renderScale * windowHeight / framebufferHeight);
     }
 
     internal void ReleaseInteraction(IGuiElement root)

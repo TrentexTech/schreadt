@@ -10,6 +10,7 @@ public sealed class Renderer : IRenderer2D
 {
     private const int CircleSegmentCount = 96;
     private const int MaximumGridLineCount = 2048;
+    private static readonly Vector4D<float> SceneClearColor = new(0.055f, 0.065f, 0.09f, 1.0f);
     private static readonly Vector2D<double>[] RectangleVertices =
     [
         new(-0.5, 0.5),
@@ -83,6 +84,7 @@ public sealed class Renderer : IRenderer2D
 
     private readonly GL _gl;
     private readonly IAssetProvider? _assets;
+    private readonly double _targetAspectRatio;
     private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.Ordinal);
     private readonly uint _circleVertexArray;
     private readonly uint _circleVertexBuffer;
@@ -104,16 +106,28 @@ public sealed class Renderer : IRenderer2D
 
     private int _framebufferWidth = 1;
     private int _framebufferHeight = 1;
+    private int _viewportX;
+    private int _viewportY;
+    private int _viewportWidth = 1;
+    private int _viewportHeight = 1;
     private CameraView _cameraView;
     private bool _renderingFrame;
     private bool _disposed;
 
-    public Vector2D<int> ViewportSize => new(_framebufferWidth, _framebufferHeight);
+    public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
-    public Renderer(GL gl, IAssetProvider? assets = null)
+    public Vector2D<int> ViewportSize => new(_viewportWidth, _viewportHeight);
+
+    public Renderer(GL gl, IAssetProvider? assets = null, double targetAspectRatio = 16.0 / 9.0)
     {
+        if (!double.IsFinite(targetAspectRatio) || targetAspectRatio <= 0.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(targetAspectRatio),
+                "The target aspect ratio must be finite and greater than zero.");
+
         _gl = gl;
         _assets = assets;
+        _targetAspectRatio = targetAspectRatio;
 
         _shaderProgram = CreateShaderProgram();
         _centerUniform = _gl.GetUniformLocation(_shaderProgram, "uCenter");
@@ -134,7 +148,7 @@ public sealed class Renderer : IRenderer2D
         _gl.UseProgram(_spriteShaderProgram);
         _gl.Uniform1(_gl.GetUniformLocation(_spriteShaderProgram, "uTexture"), 0);
 
-        _gl.ClearColor(0.055f, 0.065f, 0.09f, 1.0f);
+        _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         _gl.Enable(EnableCap.Blend);
         _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
     }
@@ -145,12 +159,13 @@ public sealed class Renderer : IRenderer2D
         ArgumentNullException.ThrowIfNull(camera);
         ArgumentNullException.ThrowIfNull(obj);
 
-        _cameraView = camera.CreateView((double)_framebufferWidth / _framebufferHeight);
+        _cameraView = camera.CreateView((double)_viewportWidth / _viewportHeight);
         _renderingFrame = true;
 
         try
         {
             _gl.Clear(ClearBufferMask.ColorBufferBit);
+            DrawScreenRectangle(Vector2D<float>.Zero, new Vector2D<float>(_viewportWidth, _viewportHeight), SceneClearColor);
             if (obj is Scene { Background.Enabled: true } scene) DrawGrid(scene.Background);
             obj.Render(this);
             if (obj is Scene debugScene) debugScene.Collisions.DrawDiagnostics(this);
@@ -168,7 +183,46 @@ public sealed class Renderer : IRenderer2D
 
         _framebufferWidth = Math.Max(width, 1);
         _framebufferHeight = Math.Max(height, 1);
-        _gl.Viewport(new Vector2D<int>(0, 0), new Vector2D<int>(_framebufferWidth, _framebufferHeight));
+        var (offset, size) = CalculateViewport(_framebufferWidth, _framebufferHeight, _targetAspectRatio);
+        _viewportX = offset.X;
+        _viewportY = offset.Y;
+        _viewportWidth = size.X;
+        _viewportHeight = size.Y;
+
+        var openGlY = _framebufferHeight - _viewportY - _viewportHeight;
+        _gl.Viewport(new Vector2D<int>(_viewportX, openGlY), new Vector2D<int>(_viewportWidth, _viewportHeight));
+    }
+
+    internal static (Vector2D<int> Offset, Vector2D<int> Size) CalculateViewport(
+        int framebufferWidth,
+        int framebufferHeight,
+        double targetAspectRatio)
+    {
+        if (framebufferWidth <= 0 || framebufferHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(framebufferWidth), "Framebuffer dimensions must be positive.");
+        if (!double.IsFinite(targetAspectRatio) || targetAspectRatio <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(targetAspectRatio));
+
+        var framebufferAspectRatio = (double)framebufferWidth / framebufferHeight;
+        int viewportWidth;
+        int viewportHeight;
+
+        if (framebufferAspectRatio > targetAspectRatio)
+        {
+            viewportHeight = framebufferHeight;
+            viewportWidth = Math.Clamp((int)Math.Round(viewportHeight * targetAspectRatio), 1, framebufferWidth);
+        }
+        else
+        {
+            viewportWidth = framebufferWidth;
+            viewportHeight = Math.Clamp((int)Math.Round(viewportWidth / targetAspectRatio), 1, framebufferHeight);
+        }
+
+        return (
+            new Vector2D<int>(
+                (framebufferWidth - viewportWidth) / 2,
+                (framebufferHeight - viewportHeight) / 2),
+            new Vector2D<int>(viewportWidth, viewportHeight));
     }
 
     public void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color)
@@ -626,10 +680,10 @@ public sealed class Renderer : IRenderer2D
     {
         if (width <= 0 || height <= 0) return;
 
-        var left = -1.0f + 2.0f * x / _framebufferWidth;
-        var right = -1.0f + 2.0f * (x + width) / _framebufferWidth;
-        var top = 1.0f - 2.0f * y / _framebufferHeight;
-        var bottom = 1.0f - 2.0f * (y + height) / _framebufferHeight;
+        var left = -1.0f + 2.0f * x / _viewportWidth;
+        var right = -1.0f + 2.0f * (x + width) / _viewportWidth;
+        var top = 1.0f - 2.0f * y / _viewportHeight;
+        var bottom = 1.0f - 2.0f * (y + height) / _viewportHeight;
 
         vertices.Add(left);
         vertices.Add(top);

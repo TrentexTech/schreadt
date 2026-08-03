@@ -172,7 +172,8 @@ public sealed unsafe class Window : IWindowController
         SetSwapInterval(_vsync);
 
         var gl = GL.GetApi(name => (nint)_sdl.GLGetProcAddress(name));
-        _renderer = new Renderer(gl, State.Assets);
+        var defaultSize = Config.Data.Window.DefaultSize;
+        _renderer = new Renderer(gl, State.Assets, (double)defaultSize.Width / defaultSize.Height);
         _loaded = true;
         if (_displayState != WindowDisplayState.Normal)
             ApplyDisplayState(WindowDisplayState.Normal, _displayState);
@@ -297,7 +298,10 @@ public sealed unsafe class Window : IWindowController
         var windowSize = Size;
         EngineLog.Debug($"Framebuffer resized to {framebufferSize.X}x{framebufferSize.Y}.", "Window");
         _renderer?.Resize(framebufferSize.X, framebufferSize.Y);
-        _app.Gui.SetViewportSizes(framebufferSize, windowSize);
+        if (_renderer is null) return;
+
+        _app.Input.SetViewportSizes(framebufferSize, windowSize, _renderer.ViewportOffset, _renderer.ViewportSize);
+        _app.Gui.SetViewportSizes(framebufferSize, windowSize, _renderer.ViewportOffset, _renderer.ViewportSize);
     }
 
     private void Close()

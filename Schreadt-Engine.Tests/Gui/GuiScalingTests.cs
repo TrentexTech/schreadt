@@ -45,6 +45,30 @@ public sealed class GuiScalingTests
         Assert.True(button.IsHovered);
     }
 
+    [Fact]
+    public void Update_AccountsForLetterboxViewportOffset()
+    {
+        using var input = new InputManager();
+        var gui = new GuiSystem(720.0f);
+        var button = gui.AddButton("PLAY");
+        button.Position = new Vector2D<float>(100.0f, 100.0f);
+        var clicks = 0;
+        button.Clicked += (_, _) => clicks++;
+        gui.SetViewportSizes(
+            new Vector2D<int>(1920, 720),
+            new Vector2D<int>(1920, 720),
+            new Vector2D<int>(320, 0),
+            new Vector2D<int>(1280, 720));
+        gui.Render(new RecordingRenderContext(1280, 720));
+
+        input.ProcessMouseMove(new System.Numerics.Vector2(430.0f, 110.0f));
+        input.ProcessMouseDown(InputMouseButton.Left);
+        input.ProcessMouseUp(InputMouseButton.Left);
+        gui.Update(input);
+
+        Assert.Equal(1, clicks);
+    }
+
     private sealed class RecordingRenderContext(int width, int height) : IRenderContext2D
     {
         public Vector2D<int> ViewportSize { get; } = new(width, height);

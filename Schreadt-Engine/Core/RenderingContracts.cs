@@ -54,6 +54,9 @@ public interface IRenderContext2D
 /// </summary>
 public interface IRenderer2D : IRenderContext2D, IDisposable
 {
+    /// <summary>Top-left framebuffer offset of the aspect-ratio-constrained viewport.</summary>
+    Vector2D<int> ViewportOffset { get; }
+
     void Render(Camera camera, GameObject obj, GuiSystem? gui = null);
     void Resize(int width, int height);
 }
