@@ -40,8 +40,9 @@ public class ExampleGameLogic : GameLogic
 
     public override void Init()
     {
-        Reality.Scenes.RegisterScene(MainScene, () => new Scene0());
-        Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1());
+        var physicsTuning = State.Assets.GetJson<ExamplePhysicsTuning>("example/physics-tuning");
+        Reality.Scenes.RegisterScene(MainScene, () => new Scene0(physicsTuning));
+        Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1(physicsTuning));
         Reality.Scenes.LoadScene(MainScene);
         Reality.MainCamera.OrthographicSize = DefaultOrthographicSize;
     }

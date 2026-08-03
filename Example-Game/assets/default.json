@@ -1,5 +1,13 @@
 {
   "name": "default",
   "version": 1,
-  "type": "Schreadt_Engine.Asset.LooseAssetLibrary"
+  "type": "Schreadt_Engine.Asset.LooseAssetLibrary",
+  "root": "default",
+  "assets": [
+    {
+      "id": "example/physics-tuning",
+      "path": "physics-tuning.json",
+      "contentType": "application/json"
+    }
+  ]
 }

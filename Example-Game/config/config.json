@@ -7,7 +7,6 @@
     }
   },
   "assetLibraries": [
-    "default",
-    "test"
+    "default"
   ]
 }

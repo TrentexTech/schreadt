@@ -2,37 +2,54 @@ using System.Reflection;
 
 namespace Schreadt_Engine.Asset;
 
-public abstract class AssetLibrary
+public abstract class AssetLibrary : IDisposable
 {
-    private static AssetLibrary? CreateAssetLibrary(string classQualifier)
-    {
-        var t = Type.GetType(classQualifier);
-        
-        if (t is null)
-        {
-            var all = AppDomain.CurrentDomain.GetAssemblies().GetEnumerator();
-            while (all.MoveNext())
-            {
-                var t2 = (Assembly)all.Current;
-                t = t2.GetType(classQualifier, false, true);
-                if (t is not null)
-                {
-                    break;
-                }
-            }
-        }
-        
-        if (t is null) throw new Exception($"Could not find asset library type '{classQualifier}'!");
-        
-        return Activator.CreateInstance(t) as AssetLibrary;
-    }
+    private bool _initialized;
 
-    public static AssetLibrary? LibraryFromManifest(AssetLibraryManifest manifest)
+    protected AssetLibraryManifest Manifest { get; private set; } = null!;
+
+    public string Name => Manifest.Name;
+
+    internal static AssetLibrary Create(AssetLibraryManifest manifest)
     {
-        var library = CreateAssetLibrary(manifest.Type);
-        
+        var type = FindLibraryType(manifest.Type)
+                   ?? throw new InvalidDataException(
+                       $"Asset library type '{manifest.Type}' from manifest '{manifest.ManifestPath}' could not be found.");
+
+        if (!typeof(AssetLibrary).IsAssignableFrom(type) || type.IsAbstract)
+            throw new InvalidDataException($"Type '{manifest.Type}' is not a concrete {nameof(AssetLibrary)}.");
+
+        if (Activator.CreateInstance(type) is not AssetLibrary library)
+            throw new InvalidDataException($"Asset library type '{manifest.Type}' must have a public parameterless constructor.");
+
+        library.Manifest = manifest;
+        library._initialized = true;
         return library;
     }
 
-    public abstract void Load();
+    internal IReadOnlyCollection<AssetRecord> LoadAssets()
+    {
+        if (!_initialized) throw new InvalidOperationException("Asset libraries must be created from a manifest.");
+        return Load();
+    }
+
+    protected abstract IReadOnlyCollection<AssetRecord> Load();
+
+    public virtual void Dispose()
+    {
+    }
+
+    private static Type? FindLibraryType(string classQualifier)
+    {
+        var type = Type.GetType(classQualifier, false, true);
+        if (type is not null) return type;
+
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            type = assembly.GetType(classQualifier, false, true);
+            if (type is not null) return type;
+        }
+
+        return null;
+    }
 }

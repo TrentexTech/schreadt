@@ -9,6 +9,13 @@ namespace Example_Game.Logic.scenes;
 
 public class Scene1 : SceneLogic
 {
+    private readonly ExamplePhysicsTuning _physicsTuning;
+
+    public Scene1(ExamplePhysicsTuning physicsTuning)
+    {
+        _physicsTuning = physicsTuning;
+    }
+
     public override void Update(double dt)
     {
     }
@@ -54,13 +61,13 @@ public class Scene1 : SceneLogic
             MaximumSpeed = 3.0
         });
         fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius));
-        fallingBody.AddImpulse(new Vector2D<double>(0.0, 0.12));
+        fallingBody.AddImpulse(new Vector2D<double>(0.0, _physicsTuning.InitialImpulse));
 
         Scene.AddChild(player);
         Scene.AddChild(landmark);
         Scene.AddChild(fallingCircle);
         Scene.AddChild(nonCollidingDecoration);
-        Scene.Collisions.Gravity = new Vector2D<double>(0.0, -2.5);
+        Scene.Collisions.Gravity = new Vector2D<double>(0.0, _physicsTuning.Gravity);
 
         State.CurrentReality.MainCamera.InitLogic(new FollowTargetCameraLogic(player));
     }

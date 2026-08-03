@@ -9,9 +9,17 @@ internal static class Config
     internal static void Load()
     {
         var configString = FileHandler.ReadFileAsString(FileType.GameConfig);
-        var data = JsonConvert.DeserializeObject<ConfigData?>(configString);
+        ConfigData? data;
+        try
+        {
+            data = JsonConvert.DeserializeObject<ConfigData?>(configString);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("Game config contains invalid JSON.", exception);
+        }
 
-        if (data is null) throw new Exception("Game config file could not be loaded!");
+        if (data is null) throw new InvalidDataException("Game config is empty.");
 
         Data = data.Value;
     }
@@ -23,7 +31,7 @@ internal struct ConfigData
     public WindowConfigData Window { get; set; }
 
     [JsonProperty("assetLibraries")]
-    public string[] AssetLibraries { get; set; }
+    public string[]? AssetLibraries { get; set; }
 }
 
 internal struct WindowConfigData

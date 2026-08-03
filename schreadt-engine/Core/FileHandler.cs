@@ -2,39 +2,22 @@ namespace Schreadt_Engine.Core;
 
 internal static class FileHandler
 {
-    private static string workingDir = Directory.GetCurrentDirectory();
+    internal static string ContentRoot { get; } = AppContext.BaseDirectory;
 
-    internal static string? ReadFileAsString(FileType fileType, string? extra = null)
+    internal static string ReadFileAsString(FileType fileType)
     {
-        var path = Path.Combine(workingDir, GetFilePathFor(fileType, extra));
-
-        if (!File.Exists(path)) return null;
-
-        try
+        var path = fileType switch
         {
-            return File.ReadAllText(path);
-        }
-        catch (Exception e)
-        {
-            // TODO: Handle missing file.
-            throw;
-        }
-    }
+            FileType.GameConfig => Path.Combine(ContentRoot, "config", "config.json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(fileType), fileType, "Unsupported engine file type.")
+        };
 
-    private static string GetFilePathFor(FileType fileType, string? extra = null)
-    {
-        switch (fileType)
-        {
-            case FileType.GameConfig: return "." + Path.DirectorySeparatorChar + "config" + Path.DirectorySeparatorChar + "config.json";
-            case FileType.Manifest: return "." + Path.DirectorySeparatorChar + "assets" + Path.DirectorySeparatorChar + extra + ".json";
-            default: throw new NotImplementedException($"File type {fileType} not implemented");
-        }
+        if (!File.Exists(path)) throw new FileNotFoundException($"Required engine file was not found: '{path}'.", path);
+        return File.ReadAllText(path);
     }
 }
 
 internal enum FileType
 {
-    GameConfig,
-    Asset,
-    Manifest
+    GameConfig
 }
