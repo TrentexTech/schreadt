@@ -40,11 +40,21 @@ public class Scene : GameObject
         Logic.Update(dt);
     }
 
+    protected override void OnFixedUpdate(double dt)
+    {
+        Logic.FixedUpdate(dt);
+    }
+
+    protected override void OnShutdown()
+    {
+        Logic.Shutdown();
+    }
+
     internal void Unload()
     {
         if (_unloaded) return;
 
-        Logic.Unload();
+        Shutdown();
         DetachFromScene();
         Collisions.Clear();
         _unloaded = true;

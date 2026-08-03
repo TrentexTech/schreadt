@@ -5,9 +5,10 @@ namespace Schreadt_Engine.Component;
 
 public class Camera : GameObject
 {
-    private ICameraLogic? _cameraLogic;
     private double _orthographicSize = 1.0;
     private double _rotationRadians;
+
+    public CameraController? Controller => GetComponent<CameraController>();
 
     /// <summary>
     /// The number of world units visible from the center of the camera to the
@@ -40,12 +41,30 @@ public class Camera : GameObject
         }
     }
 
-    public void InitLogic(ICameraLogic logic)
+    public T SetController<T>(T controller) where T : CameraController
     {
-        ArgumentNullException.ThrowIfNull(logic);
+        ArgumentNullException.ThrowIfNull(controller);
 
-        _cameraLogic = logic;
-        if (Initialized) _cameraLogic.Init(this);
+        var previous = Controller;
+        if (ReferenceEquals(previous, controller)) return controller;
+        if (previous is null) return AddComponent(controller);
+
+        RemoveComponent(previous);
+        try
+        {
+            return AddComponent(controller);
+        }
+        catch
+        {
+            AddComponent(previous);
+            throw;
+        }
+    }
+
+    public bool ClearController()
+    {
+        var controller = Controller;
+        return controller is not null && RemoveComponent(controller);
     }
 
     public Vector2D<double> WorldToViewportPoint(Vector2D<double> worldPosition, double aspectRatio)
@@ -60,16 +79,6 @@ public class Camera : GameObject
         return CreateView(aspectRatio).NormalizedDeviceToWorldPoint(normalizedDevicePoint);
     }
 
-    protected override void OnInit()
-    {
-        _cameraLogic?.Init(this);
-    }
-
-    protected override void OnUpdate(double dt)
-    {
-        _cameraLogic?.Update(dt);
-    }
-
     internal CameraView CreateView(double aspectRatio)
     {
         if (!double.IsFinite(aspectRatio) || aspectRatio <= 0)
@@ -79,9 +88,27 @@ public class Camera : GameObject
     }
 }
 
-public interface ICameraLogic : IUpdateable
+public abstract class CameraController : GameComponent, IInitializable, IUpdateable, IShutdownable
 {
-    void Init(Camera camera);
+    protected Camera Camera => (Camera)Owner;
+
+    public virtual void Init()
+    {
+    }
+
+    public abstract void Update(double dt);
+
+    public virtual void Shutdown()
+    {
+    }
+
+    protected override void OnAttached()
+    {
+        if (Owner is not Camera camera)
+            throw new InvalidOperationException($"{nameof(CameraController)} components can only be attached to a camera.");
+        if (camera.Controller is not null)
+            throw new InvalidOperationException("A camera can only have one controller.");
+    }
 }
 
 internal readonly struct CameraView

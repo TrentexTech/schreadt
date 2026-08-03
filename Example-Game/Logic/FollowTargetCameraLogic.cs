@@ -2,29 +2,27 @@ using Schreadt_Engine.Component;
 
 namespace Example_Game.Logic;
 
-public sealed class FollowTargetCameraLogic : ICameraLogic
+public sealed class FollowTargetCameraLogic : CameraController
 {
     private readonly GameObject _target;
-    private Camera? _camera;
 
     public FollowTargetCameraLogic(GameObject target)
     {
         _target = target;
     }
 
-    public void Init(Camera camera)
+    public override void Init()
     {
-        _camera = camera;
         FollowTarget();
     }
 
-    public void Update(double dt)
+    public override void Update(double dt)
     {
         FollowTarget();
     }
 
     private void FollowTarget()
     {
-        if (_camera is not null) _camera.Position = _target.Position;
+        Camera.Position = _target.Position;
     }
 }

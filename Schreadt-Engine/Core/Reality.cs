@@ -44,6 +44,7 @@ public class Reality : IUpdateable
 
     internal void FixedUpdate(double dt)
     {
+        GameLogic?.FixedUpdate(dt);
         Scenes.FixedUpdate(dt);
     }
 
@@ -60,6 +61,9 @@ public class Reality : IUpdateable
     internal void Shutdown()
     {
         Scenes.Shutdown();
+        MainCamera.Shutdown();
+        GameLogic?.Shutdown();
+        _initialized = false;
     }
 
     public void SetMainCamera(Camera camera)

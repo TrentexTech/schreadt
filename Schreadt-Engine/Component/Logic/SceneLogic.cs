@@ -1,6 +1,6 @@
 namespace Schreadt_Engine.Component.Logic;
 
-public abstract class SceneLogic : ILogic
+public abstract class SceneLogic : IInitializable, IUpdateable, IFixedUpdateable, IShutdownable
 {
     private Scene? _scene;
 
@@ -23,7 +23,11 @@ public abstract class SceneLogic : ILogic
 
     public abstract void Init();
 
-    public virtual void Unload()
+    public virtual void FixedUpdate(double dt)
+    {
+    }
+
+    public virtual void Shutdown()
     {
     }
 }

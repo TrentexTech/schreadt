@@ -22,4 +22,14 @@ public abstract class Actor : GameObject
     {
         ActorLogic?.Update(dt);
     }
+
+    protected override void OnFixedUpdate(double dt)
+    {
+        ActorLogic?.FixedUpdate(dt);
+    }
+
+    protected override void OnShutdown()
+    {
+        ActorLogic?.Shutdown();
+    }
 }

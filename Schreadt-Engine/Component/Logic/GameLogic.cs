@@ -2,7 +2,7 @@ using Schreadt_Engine.Core;
 
 namespace Schreadt_Engine.Component.Logic;
 
-public abstract class GameLogic : ILogic
+public abstract class GameLogic : IInitializable, IUpdateable, IFixedUpdateable, IShutdownable
 {
     private Reality? _reality;
 
@@ -24,4 +24,12 @@ public abstract class GameLogic : ILogic
     public abstract void Update(double dt);
 
     public abstract void Init();
+
+    public virtual void FixedUpdate(double dt)
+    {
+    }
+
+    public virtual void Shutdown()
+    {
+    }
 }

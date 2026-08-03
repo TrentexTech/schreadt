@@ -4,7 +4,7 @@ using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Component;
 
-public abstract class GameObject : IUpdateable, IRenderable
+public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable, IShutdownable, IRenderable
 {
     private bool _initialized;
     private GameObject? _parent;
@@ -38,6 +38,11 @@ public abstract class GameObject : IUpdateable, IRenderable
 
         OnInit();
 
+        foreach (var component in _components.ToArray())
+        {
+            if (component.IsOwnedBy(this) && component is IInitializable initializable) initializable.Init();
+        }
+
         foreach (var child in _children.ToArray())
         {
             child.Init();
@@ -53,10 +58,53 @@ public abstract class GameObject : IUpdateable, IRenderable
 
         OnUpdate(dt);
 
+        foreach (var component in _components.ToArray())
+        {
+            if (component.IsOwnedBy(this) && component is IUpdateable updateable) updateable.Update(dt);
+        }
+
         foreach (var child in _children.ToArray())
         {
             if (ReferenceEquals(child.Parent, this)) child.Update(dt);
         }
+    }
+
+    public void FixedUpdate(double dt)
+    {
+        EnsureInitialized();
+        if (!Active) return;
+
+        OnFixedUpdate(dt);
+
+        foreach (var component in _components.ToArray())
+        {
+            if (component.IsOwnedBy(this) && component is IFixedUpdateable fixedUpdateable)
+                fixedUpdateable.FixedUpdate(dt);
+        }
+
+        foreach (var child in _children.ToArray())
+        {
+            if (ReferenceEquals(child.Parent, this)) child.FixedUpdate(dt);
+        }
+    }
+
+    public void Shutdown()
+    {
+        if (!_initialized) return;
+
+        OnShutdown();
+
+        foreach (var child in _children.ToArray().Reverse())
+        {
+            if (ReferenceEquals(child.Parent, this)) child.Shutdown();
+        }
+
+        foreach (var component in _components.ToArray().Reverse())
+        {
+            if (component.IsOwnedBy(this) && component is IShutdownable shutdownable) shutdownable.Shutdown();
+        }
+
+        _initialized = false;
     }
 
     public void Render(Renderer renderer)
@@ -110,6 +158,7 @@ public abstract class GameObject : IUpdateable, IRenderable
 
         if (!_children.Contains(child)) return false;
 
+        child.Shutdown();
         if (child._scene is not null) child.DetachFromScene();
         _children.Remove(child);
         child._parent = null;
@@ -122,13 +171,21 @@ public abstract class GameObject : IUpdateable, IRenderable
 
         component.Attach(this);
         _components.Add(component);
+        var registeredWithScene = false;
 
         try
         {
-            _scene?.RegisterComponent(component);
+            if (_scene is not null)
+            {
+                _scene.RegisterComponent(component);
+                registeredWithScene = true;
+            }
+
+            if (_initialized && component is IInitializable initializable) initializable.Init();
         }
         catch
         {
+            if (registeredWithScene) _scene!.UnregisterComponent(component);
             _components.Remove(component);
             component.Detach();
             throw;
@@ -144,6 +201,7 @@ public abstract class GameObject : IUpdateable, IRenderable
         if (!component.IsOwnedBy(this) || !_components.Contains(component)) return false;
 
         component.ValidateCanDetach();
+        if (_initialized && component is IShutdownable shutdownable) shutdownable.Shutdown();
         _scene?.UnregisterComponent(component);
         _components.Remove(component);
         component.Detach();
@@ -165,6 +223,14 @@ public abstract class GameObject : IUpdateable, IRenderable
     }
 
     protected virtual void OnUpdate(double dt)
+    {
+    }
+
+    protected virtual void OnFixedUpdate(double dt)
+    {
+    }
+
+    protected virtual void OnShutdown()
     {
     }
 

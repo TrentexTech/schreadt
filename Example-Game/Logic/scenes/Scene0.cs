@@ -97,6 +97,6 @@ public class Scene0 : SceneLogic
         Scene.AddChild(nonCollidingDecoration);
         Scene.Collisions.Gravity = new Vector2D<double>(0.0, _physicsTuning.Gravity);
 
-        State.CurrentReality.MainCamera.InitLogic(new FollowTargetCameraLogic(player));
+        State.CurrentReality.MainCamera.SetController(new FollowTargetCameraLogic(player));
     }
 }

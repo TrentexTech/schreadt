@@ -89,7 +89,8 @@ public sealed class SceneManager
     {
         if (!_initialized) throw new InvalidOperationException("The scene manager has not been initialized.");
 
-        CurrentScene!.Collisions.Step(dt);
+        CurrentScene!.FixedUpdate(dt);
+        CurrentScene.Collisions.Step(dt);
     }
 
     internal void Shutdown()
