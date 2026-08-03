@@ -74,6 +74,14 @@ public class Scene1 : SceneLogic
             RotationRadians = 0.16,
             Color = new Vector4D<float>(0.65f, 0.35f, 1.0f, 0.9f)
         };
+        var checkpoint = new TriggerZone2D(0.32)
+        {
+            Position = new Vector2D<double>(0.15, 0.15),
+            Color = new Vector4D<float>(0.75f, 0.3f, 1.0f, 0.25f),
+            Filter = candidate => ReferenceEquals(candidate, player)
+        };
+        checkpoint.Entered += _ => checkpoint.Color = new Vector4D<float>(1.0f, 0.45f, 0.75f, 0.55f);
+        checkpoint.Exited += _ => checkpoint.Color = new Vector4D<float>(0.75f, 0.3f, 1.0f, 0.25f);
         player.AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Kinematic
@@ -95,6 +103,7 @@ public class Scene1 : SceneLogic
         Scene.AddChild(energyBeacon);
         Scene.AddChild(tiltedPanel);
         Scene.AddChild(hexagon);
+        Scene.AddChild(checkpoint);
         Scene.AddChild(player);
         Scene.AddChild(landmark);
         Scene.AddChild(fallingCircle);

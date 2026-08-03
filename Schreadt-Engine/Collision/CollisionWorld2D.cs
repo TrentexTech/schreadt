@@ -51,6 +51,12 @@ public sealed class CollisionWorld2D
 
         if (!ReferenceEquals(collider.World, this) || !_colliders.Remove(collider)) return false;
 
+        var endedPairs = _activePairs
+            .Where(pair => pair.Key.Contains(collider.Id))
+            .ToArray();
+        foreach (var (pair, _) in endedPairs) _activePairs.Remove(pair);
+        foreach (var (_, manifold) in endedPairs) NotifyExited(manifold);
+
         collider.World = null;
 
         if (!_colliders.Any(candidate => ReferenceEquals(candidate.Body, collider.Body)))
@@ -118,6 +124,10 @@ public sealed class CollisionWorld2D
 
     internal void Clear()
     {
+        var endedManifolds = _activePairs.Values.ToArray();
+        _activePairs.Clear();
+        foreach (var manifold in endedManifolds) NotifyExited(manifold);
+
         foreach (var collider in _colliders)
         {
             collider.World = null;
@@ -130,7 +140,6 @@ public sealed class CollisionWorld2D
 
         _colliders.Clear();
         _bodies.Clear();
-        _activePairs.Clear();
     }
 
     private bool CanCollide(Collider2D collider)
@@ -285,7 +294,10 @@ public sealed class CollisionWorld2D
         return new CollisionContact2D(manifold.First, -manifold.Normal, manifold.Penetration);
     }
 
-    private readonly record struct ColliderPair(long FirstId, long SecondId);
+    private readonly record struct ColliderPair(long FirstId, long SecondId)
+    {
+        internal bool Contains(long colliderId) => FirstId == colliderId || SecondId == colliderId;
+    }
 
     private readonly record struct CollisionManifold(
         Collider2D First,
