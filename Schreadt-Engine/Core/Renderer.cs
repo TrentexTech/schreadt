@@ -103,6 +103,7 @@ public sealed class Renderer : IRenderer2D
     private readonly int _spriteAxisYUniform;
     private readonly int _spriteRegionUniform;
     private readonly int _spriteTintUniform;
+    private readonly uint _pixelTexture;
 
     private int _framebufferWidth = 1;
     private int _framebufferHeight = 1;
@@ -113,6 +114,7 @@ public sealed class Renderer : IRenderer2D
     private CameraView _cameraView;
     private bool _renderingFrame;
     private bool _disposed;
+    private TextureSampling? _pixelTextureSampling;
 
     public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
@@ -147,6 +149,12 @@ public sealed class Renderer : IRenderer2D
 
         _gl.UseProgram(_spriteShaderProgram);
         _gl.Uniform1(_gl.GetUniformLocation(_spriteShaderProgram, "uTexture"), 0);
+
+        _pixelTexture = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
 
         _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         _gl.Enable(EnableCap.Blend);
@@ -442,12 +450,70 @@ public sealed class Renderer : IRenderer2D
         DrawDynamicBatch(vertices, color, PrimitiveType.Triangles);
     }
 
+    public unsafe void DrawScreenPixels(
+        ReadOnlySpan<byte> rgbaPixels,
+        int pixelWidth,
+        int pixelHeight,
+        TextureSampling sampling = TextureSampling.Nearest)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_renderingFrame) throw new InvalidOperationException("Pixel buffers must be drawn while rendering a frame.");
+        if (pixelWidth <= 0) throw new ArgumentOutOfRangeException(nameof(pixelWidth));
+        if (pixelHeight <= 0) throw new ArgumentOutOfRangeException(nameof(pixelHeight));
+
+        int expectedLength;
+        try
+        {
+            expectedLength = checked(pixelWidth * pixelHeight * 4);
+        }
+        catch (OverflowException)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pixelWidth), "Pixel buffer dimensions are too large.");
+        }
+
+        if (rgbaPixels.Length != expectedLength)
+            throw new ArgumentException(
+                $"The pixel buffer must contain exactly {expectedLength} RGBA bytes.",
+                nameof(rgbaPixels));
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
+        SetPixelTextureSampling(sampling);
+        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
+
+        fixed (byte* data = rgbaPixels)
+        {
+            _gl.TexImage2D(
+                TextureTarget.Texture2D,
+                0,
+                InternalFormat.Rgba8,
+                (uint)pixelWidth,
+                (uint)pixelHeight,
+                0,
+                PixelFormat.Rgba,
+                PixelType.UnsignedByte,
+                data);
+        }
+
+        _gl.UseProgram(_spriteShaderProgram);
+        _gl.Uniform2(_spriteCenterUniform, 0.0f, 0.0f);
+        _gl.Uniform2(_spriteAxisXUniform, 1.0f, 0.0f);
+        _gl.Uniform2(_spriteAxisYUniform, 0.0f, 1.0f);
+        _gl.Uniform4(_spriteRegionUniform, 0.0f, 0.0f, 1.0f, 1.0f);
+        _gl.Uniform4(_spriteTintUniform, 1.0f, 1.0f, 1.0f, 1.0f);
+        _gl.BindVertexArray(_spriteVertexArray);
+        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        _gl.BindVertexArray(0);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
 
         foreach (var texture in _textures.Values) _gl.DeleteTexture(texture.Handle);
         _textures.Clear();
+        _gl.DeleteTexture(_pixelTexture);
         _gl.DeleteBuffer(_spriteVertexBuffer);
         _gl.DeleteVertexArray(_spriteVertexArray);
         _gl.DeleteProgram(_spriteShaderProgram);
@@ -602,6 +668,22 @@ public sealed class Renderer : IRenderer2D
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, filter);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, filter);
         texture.CurrentSampling = sampling;
+    }
+
+    private void SetPixelTextureSampling(TextureSampling sampling)
+    {
+        if (_pixelTextureSampling == sampling) return;
+
+        var filter = sampling switch
+        {
+            TextureSampling.Nearest => (int)TextureMinFilter.Nearest,
+            TextureSampling.Linear => (int)TextureMinFilter.Linear,
+            _ => throw new ArgumentOutOfRangeException(nameof(sampling), sampling, "Unsupported texture sampling mode.")
+        };
+
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, filter);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, filter);
+        _pixelTextureSampling = sampling;
     }
 
     private void DrawGrid(GridBackground2D grid)

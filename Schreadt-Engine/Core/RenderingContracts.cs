@@ -50,9 +50,23 @@ public interface IRenderContext2D
 }
 
 /// <summary>
+/// Extends two-dimensional rendering with a viewport-sized RGBA pixel buffer.
+/// Pixel rows are ordered from top to bottom and each pixel contains four bytes
+/// in red, green, blue, alpha order.
+/// </summary>
+public interface IPixelRenderContext2D : IRenderContext2D
+{
+    void DrawScreenPixels(
+        ReadOnlySpan<byte> rgbaPixels,
+        int pixelWidth,
+        int pixelHeight,
+        TextureSampling sampling = TextureSampling.Nearest);
+}
+
+/// <summary>
 /// Owns complete camera-based frames in addition to accepting draw commands.
 /// </summary>
-public interface IRenderer2D : IRenderContext2D, IDisposable
+public interface IRenderer2D : IPixelRenderContext2D, IDisposable
 {
     /// <summary>Top-left framebuffer offset of the aspect-ratio-constrained viewport.</summary>
     Vector2D<int> ViewportOffset { get; }
