@@ -1,53 +1,72 @@
+using System.Diagnostics;
 using Schreadt_Engine.Component;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
-using Silk.NET.Windowing;
-using Silk.NET.Windowing.Sdl;
+using Silk.NET.SDL;
 using SdlApi = Silk.NET.SDL.Sdl;
+using SdlWindow = Silk.NET.SDL.Window;
 
 namespace Schreadt_Engine.Core;
 
-public sealed class Window : IWindowController
+public sealed unsafe class Window : IWindowController
 {
     private readonly Application _app;
-    private readonly IWindow _window;
     private IRenderer2D? _renderer;
     private SdlApi? _sdl;
+    private SdlWindow* _window;
+    private void* _glContext;
     private WindowDisplayState _windowedState = WindowDisplayState.Normal;
     private string _title;
     private Vector2D<int> _size;
     private WindowDisplayState _displayState = WindowDisplayState.Normal;
-    private bool _vsync;
+    private bool _vsync = true;
+    private bool _sdlInitialized;
     private bool _loaded;
     private bool _closeRequested;
-    private bool _closeSubmitted;
     private bool _closing;
 
     public string Title
     {
-        get => _loaded ? _window.Title : _title;
+        get => _title;
         set
         {
             ArgumentNullException.ThrowIfNull(value);
             _title = value;
-            if (_loaded) _window.Title = value;
+            if (_loaded) _sdl!.SetWindowTitle(_window, value);
         }
     }
 
     public Vector2D<int> Size
     {
-        get => _loaded ? _window.Size : _size;
+        get
+        {
+            if (!_loaded) return _size;
+            var width = 0;
+            var height = 0;
+            _sdl!.GetWindowSize(_window, ref width, ref height);
+            return _size = new Vector2D<int>(width, height);
+        }
         set
         {
             if (value.X <= 0 || value.Y <= 0)
                 throw new ArgumentOutOfRangeException(nameof(value), "Window dimensions must be greater than zero.");
 
             _size = value;
-            if (_loaded) _window.Size = value;
+            if (_loaded) _sdl!.SetWindowSize(_window, value.X, value.Y);
         }
     }
 
-    public Vector2D<int> FramebufferSize => _loaded ? _window.FramebufferSize : _size;
+    public Vector2D<int> FramebufferSize
+    {
+        get
+        {
+            if (!_loaded) return _size;
+            var width = 0;
+            var height = 0;
+            _sdl!.GLGetDrawableSize(_window, ref width, ref height);
+            return new Vector2D<int>(width, height);
+        }
+    }
 
     public WindowDisplayState DisplayState
     {
@@ -64,18 +83,18 @@ public sealed class Window : IWindowController
                     : WindowDisplayState.Normal;
             }
 
-            if (_loaded) ApplyBackendDisplayState(currentState, value);
+            if (_loaded) ApplyDisplayState(currentState, value);
             _displayState = value;
         }
     }
 
     public bool VSync
     {
-        get => _loaded ? _window.VSync : _vsync;
+        get => _vsync;
         set
         {
+            if (_loaded) SetSwapInterval(value);
             _vsync = value;
-            if (_loaded) _window.VSync = value;
         }
     }
 
@@ -84,36 +103,21 @@ public sealed class Window : IWindowController
     internal Window(Application app)
     {
         _app = app;
-
-        SdlWindowing.Use();
-
-        var title = Config.Data.Window.Title;
-        var size = new Vector2D<int>(Config.Data.Window.DefaultSize.Width, Config.Data.Window.DefaultSize.Height);
-
-        var options = WindowOptions.Default;
-        options.Size = size;
-        options.Title = title;
-
-        _title = options.Title;
-        _size = options.Size;
-        _displayState = FromBackendState(options.WindowState);
-        _vsync = options.VSync;
-
-        _window = Silk.NET.Windowing.Window.Create(options);
-
-        if (!SdlWindowing.IsViewSdl(_window))
-            throw new InvalidOperationException("Silk.NET did not create the window with the SDL backend.");
-
-        _window.Load += OnLoad;
-        _window.Update += OnUpdate;
-        _window.Render += OnRender;
-        _window.FramebufferResize += OnFramebufferResize;
-        _window.Closing += OnClosing;
+        _title = Config.Data.Window.Title;
+        _size = new Vector2D<int>(Config.Data.Window.DefaultSize.Width, Config.Data.Window.DefaultSize.Height);
     }
 
     internal void Run()
     {
-        _window.Run();
+        try
+        {
+            Load();
+            RunMainLoop();
+        }
+        finally
+        {
+            Close();
+        }
     }
 
     public void ToggleFullscreen()
@@ -137,45 +141,169 @@ public sealed class Window : IWindowController
         _closeRequested = true;
     }
 
-    private void OnLoad()
+    private void Load()
     {
-        EngineLog.Information("SDL window and OpenGL context loaded.", "Window");
-        _loaded = true;
         _sdl = SdlApi.GetApi();
-        _window.Title = _title;
-        _window.Size = _size;
-        ApplyBackendDisplayState(WindowDisplayState.Normal, _displayState);
-        _window.VSync = _vsync;
-        _app.Input.Initialize(_window);
-        var gl = GL.GetApi(_window);
+        ThrowIfSdlError(_sdl.Init(SdlApi.InitVideo | SdlApi.InitEvents), "initialize SDL");
+        _sdlInitialized = true;
+
+        SetGlAttribute(GLattr.ContextMajorVersion, 3);
+        SetGlAttribute(GLattr.ContextMinorVersion, 3);
+        SetGlAttribute(GLattr.ContextProfileMask, (int)GLprofile.Core);
+        SetGlAttribute(GLattr.ContextFlags, (int)GLcontextFlag.ForwardCompatibleFlag);
+        SetGlAttribute(GLattr.Doublebuffer, 1);
+
+        const WindowFlags flags = WindowFlags.Opengl |
+                                  WindowFlags.Shown |
+                                  WindowFlags.Resizable |
+                                  WindowFlags.AllowHighdpi;
+        _window = _sdl.CreateWindow(
+            _title,
+            SdlApi.WindowposCentered,
+            SdlApi.WindowposCentered,
+            _size.X,
+            _size.Y,
+            (uint)flags);
+        if (_window == null) ThrowSdlError("create the window");
+
+        _glContext = _sdl.GLCreateContext(_window);
+        if (_glContext == null) ThrowSdlError("create the OpenGL context");
+        ThrowIfSdlError(_sdl.GLMakeCurrent(_window, _glContext), "make the OpenGL context current");
+        SetSwapInterval(_vsync);
+
+        var gl = GL.GetApi(name => (nint)_sdl.GLGetProcAddress(name));
         _renderer = new Renderer(gl, State.Assets);
-        OnFramebufferResize(_window.FramebufferSize);
-        SubmitCloseIfRequested();
+        _loaded = true;
+        if (_displayState != WindowDisplayState.Normal)
+            ApplyDisplayState(WindowDisplayState.Normal, _displayState);
+
+        _app.Input.Initialize(_sdl, this);
+        _sdl.StartTextInput();
+        ResizeRenderer();
+        EngineLog.Information("SDL window, OpenGL context, and SDL_PollEvent loop loaded.", "Window");
     }
 
-    private void OnUpdate(double dt)
+    private void RunMainLoop()
     {
-        if (!_closeRequested) _app.Update(dt);
-        SubmitCloseIfRequested();
+        var previousTimestamp = Stopwatch.GetTimestamp();
+
+        while (!_closeRequested)
+        {
+            PollEvents();
+            if (_closeRequested) break;
+
+            var timestamp = Stopwatch.GetTimestamp();
+            var frameTime = (timestamp - previousTimestamp) / (double)Stopwatch.Frequency;
+            previousTimestamp = timestamp;
+
+            _app.Update(frameTime);
+            if (_closeRequested) break;
+
+            _app.Render(_renderer!, frameTime);
+            _sdl!.GLSwapWindow(_window);
+        }
     }
 
-    private void OnRender(double dt)
+    private void PollEvents()
     {
-        if (!_closeRequested && _renderer is not null) _app.Render(_renderer, dt);
+        Event currentEvent = default;
+        while (_sdl!.PollEvent(ref currentEvent) != 0)
+        {
+            switch ((EventType)currentEvent.Type)
+            {
+                case EventType.Quit:
+                    RequestClose();
+                    break;
+                case EventType.Windowevent:
+                    ProcessWindowEvent(currentEvent.Window);
+                    break;
+                case EventType.Keydown:
+                    _app.Input.ProcessKeyDown(InputManager.TranslateScancode(currentEvent.Key.Keysym.Scancode));
+                    break;
+                case EventType.Keyup:
+                    _app.Input.ProcessKeyUp(InputManager.TranslateScancode(currentEvent.Key.Keysym.Scancode));
+                    break;
+                case EventType.Textinput:
+                    ProcessTextInput(currentEvent.Text);
+                    break;
+                case EventType.Mousemotion:
+                    _app.Input.ProcessMouseMove(
+                        new System.Numerics.Vector2(currentEvent.Motion.X, currentEvent.Motion.Y),
+                        new System.Numerics.Vector2(currentEvent.Motion.Xrel, currentEvent.Motion.Yrel));
+                    break;
+                case EventType.Mousebuttondown:
+                    _app.Input.ProcessMouseDown(InputManager.TranslateMouseButton(currentEvent.Button.Button));
+                    break;
+                case EventType.Mousebuttonup:
+                    _app.Input.ProcessMouseUp(InputManager.TranslateMouseButton(currentEvent.Button.Button));
+                    break;
+                case EventType.Mousewheel:
+                    var direction = (MouseWheelDirection)currentEvent.Wheel.Direction;
+                    var multiplier = direction == MouseWheelDirection.Flipped ? -1.0f : 1.0f;
+                    _app.Input.ProcessScroll(new System.Numerics.Vector2(
+                        currentEvent.Wheel.PreciseX * multiplier,
+                        currentEvent.Wheel.PreciseY * multiplier));
+                    break;
+            }
+        }
     }
 
-    private void OnFramebufferResize(Vector2D<int> size)
+    private void ProcessWindowEvent(WindowEvent windowEvent)
     {
-        EngineLog.Debug($"Framebuffer resized to {size.X}x{size.Y}.", "Window");
-        _renderer?.Resize(size.X, size.Y);
+        switch ((WindowEventID)windowEvent.Event)
+        {
+            case WindowEventID.Close:
+                RequestClose();
+                break;
+            case WindowEventID.Resized:
+            case WindowEventID.SizeChanged:
+                _size = new Vector2D<int>(windowEvent.Data1, windowEvent.Data2);
+                ResizeRenderer();
+                break;
+            case WindowEventID.Minimized:
+                if (!IsFullscreen(_displayState)) _displayState = WindowDisplayState.Minimized;
+                break;
+            case WindowEventID.Maximized:
+                if (!IsFullscreen(_displayState))
+                {
+                    _displayState = WindowDisplayState.Maximized;
+                    _windowedState = WindowDisplayState.Maximized;
+                }
+                break;
+            case WindowEventID.Restored:
+                if (!IsFullscreen(_displayState))
+                {
+                    _displayState = WindowDisplayState.Normal;
+                    _windowedState = WindowDisplayState.Normal;
+                }
+                break;
+            case WindowEventID.FocusLost:
+                _app.Input.ProcessFocusLost();
+                break;
+        }
     }
 
-    private void OnClosing()
+    private void ProcessTextInput(TextInputEvent textInputEvent)
     {
-        EngineLog.Information("Window is closing.", "Window");
-        _closeRequested = true;
+        byte* text = textInputEvent.Text;
+        var input = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)text);
+        if (input is null) return;
+        foreach (var character in input) _app.Input.ProcessCharacterTyped(character);
+    }
+
+    private void ResizeRenderer()
+    {
+        var framebufferSize = FramebufferSize;
+        EngineLog.Debug($"Framebuffer resized to {framebufferSize.X}x{framebufferSize.Y}.", "Window");
+        _renderer?.Resize(framebufferSize.X, framebufferSize.Y);
+    }
+
+    private void Close()
+    {
         if (_closing) return;
         _closing = true;
+        _closeRequested = true;
+        EngineLog.Information("Window is closing.", "Window");
 
         try
         {
@@ -183,90 +311,92 @@ public sealed class Window : IWindowController
         }
         finally
         {
+            if (_sdl is not null && _sdlInitialized) _sdl.StopTextInput();
             _app.Input.Dispose();
             _renderer?.Dispose();
             _renderer = null;
+
+            if (_sdl is not null && _glContext != null)
+            {
+                _sdl.GLDeleteContext(_glContext);
+                _glContext = null;
+            }
+
+            if (_sdl is not null && _window != null)
+            {
+                _sdl.DestroyWindow(_window);
+                _window = null;
+            }
+
+            if (_sdl is not null && _sdlInitialized)
+            {
+                _sdl.Quit();
+                _sdlInitialized = false;
+            }
+
             _sdl?.Dispose();
             _sdl = null;
             _loaded = false;
         }
     }
 
-    private void SubmitCloseIfRequested()
-    {
-        if (!_closeRequested || _closeSubmitted || _closing) return;
-
-        _closeSubmitted = true;
-        _window.Close();
-    }
-
-    private unsafe void ApplyBackendDisplayState(
+    private void ApplyDisplayState(
         WindowDisplayState currentState,
         WindowDisplayState requestedState)
     {
-        var sdl = _sdl
-            ?? throw new InvalidOperationException("The SDL API is not available for the active window.");
-        var sdlWindow = (Silk.NET.SDL.Window*)_window.Handle;
-
         if (requestedState == WindowDisplayState.Fullscreen)
         {
-            SetSdlFullscreen(
-                sdl,
-                sdlWindow,
-                (uint)Silk.NET.SDL.WindowFlags.Fullscreen,
-                "enter exclusive fullscreen mode");
+            SetSdlFullscreen((uint)WindowFlags.Fullscreen, "enter exclusive fullscreen mode");
             return;
         }
 
         if (requestedState == WindowDisplayState.BorderlessFullscreen)
         {
-            SetSdlFullscreen(
-                sdl,
-                sdlWindow,
-                (uint)Silk.NET.SDL.WindowFlags.FullscreenDesktop,
-                "enter borderless fullscreen mode");
+            SetSdlFullscreen((uint)WindowFlags.FullscreenDesktop, "enter borderless fullscreen mode");
             return;
         }
 
-        if (IsFullscreen(currentState))
-            SetSdlFullscreen(sdl, sdlWindow, 0u, "leave fullscreen mode");
+        if (IsFullscreen(currentState)) SetSdlFullscreen(0u, "leave fullscreen mode");
 
-        _window.WindowState = ToBackendState(requestedState);
-    }
-
-    private static unsafe void SetSdlFullscreen(
-        SdlApi sdl,
-        Silk.NET.SDL.Window* window,
-        uint flags,
-        string operation)
-    {
-        var result = sdl.SetWindowFullscreen(window, flags);
-        if (result != 0)
-            throw new InvalidOperationException($"SDL could not {operation}: {sdl.GetErrorS()}");
-    }
-
-    private static WindowDisplayState FromBackendState(WindowState state)
-    {
-        return state switch
+        switch (requestedState)
         {
-            WindowState.Normal => WindowDisplayState.Normal,
-            WindowState.Minimized => WindowDisplayState.Minimized,
-            WindowState.Maximized => WindowDisplayState.Maximized,
-            WindowState.Fullscreen => WindowDisplayState.Fullscreen,
-            _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown backend window state.")
-        };
+            case WindowDisplayState.Normal:
+                _sdl!.RestoreWindow(_window);
+                break;
+            case WindowDisplayState.Minimized:
+                _sdl!.MinimizeWindow(_window);
+                break;
+            case WindowDisplayState.Maximized:
+                _sdl!.MaximizeWindow(_window);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(requestedState), requestedState, "Unknown window state.");
+        }
     }
 
-    private static WindowState ToBackendState(WindowDisplayState state)
+    private void SetSdlFullscreen(uint flags, string operation)
     {
-        return state switch
-        {
-            WindowDisplayState.Normal => WindowState.Normal,
-            WindowDisplayState.Minimized => WindowState.Minimized,
-            WindowDisplayState.Maximized => WindowState.Maximized,
-            WindowDisplayState.Fullscreen => WindowState.Fullscreen,
-            _ => throw new ArgumentOutOfRangeException(nameof(state), state, "Unknown window state.")
-        };
+        ThrowIfSdlError(_sdl!.SetWindowFullscreen(_window, flags), operation);
+    }
+
+    private void SetSwapInterval(bool enabled)
+    {
+        ThrowIfSdlError(_sdl!.GLSetSwapInterval(enabled ? 1 : 0), $"{(enabled ? "enable" : "disable")} VSync");
+    }
+
+    private void SetGlAttribute(GLattr attribute, int value)
+    {
+        ThrowIfSdlError(_sdl!.GLSetAttribute(attribute, value), $"set OpenGL attribute {attribute}");
+    }
+
+    private void ThrowIfSdlError(int result, string operation)
+    {
+        if (result != 0) ThrowSdlError(operation);
+    }
+
+    private void ThrowSdlError(string operation)
+    {
+        throw new InvalidOperationException($"SDL could not {operation}: {_sdl?.GetErrorS() ?? "unknown error"}");
     }
 
     internal static WindowDisplayState GetFullscreenToggleTarget(

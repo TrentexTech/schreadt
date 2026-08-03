@@ -1,8 +1,8 @@
 using System.Numerics;
 using System.Text;
-using Silk.NET.Input;
 using Silk.NET.Maths;
-using Silk.NET.Windowing;
+using Silk.NET.SDL;
+using SdlApi = Silk.NET.SDL.Sdl;
 
 namespace Schreadt_Engine.Core;
 
@@ -19,13 +19,11 @@ public sealed class InputManager : IInputService, IDisposable
     private readonly HashSet<string> _actionsReleased = new(StringComparer.OrdinalIgnoreCase);
     private readonly StringBuilder _textInput = new();
 
-    private IView? _view;
-    private IInputContext? _context;
-    private IKeyboard? _keyboard;
-    private IMouse? _mouse;
+    private IWindowController? _view;
+    private SdlApi? _sdl;
     private bool _disposed;
 
-    public bool Available => _context is not null;
+    public bool Available => _sdl is not null;
 
     public Vector2 MousePosition { get; private set; }
 
@@ -122,47 +120,39 @@ public sealed class InputManager : IInputService, IDisposable
 
     public bool IsCursorModeSupported(InputCursorMode mode)
     {
-        return TryGetBackendCursorMode(mode, out var backendMode) &&
-               _mouse?.Cursor.IsSupported(backendMode) == true;
+        return Available && Enum.IsDefined(mode);
     }
 
     public void SetCursorMode(InputCursorMode mode)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var cursor = _mouse?.Cursor ?? throw new InvalidOperationException("No mouse is connected.");
-        if (!TryGetBackendCursorMode(mode, out var backendMode) || !cursor.IsSupported(backendMode))
-            throw new NotSupportedException($"Cursor mode '{mode}' is not supported by the active input backend.");
-        cursor.CursorMode = backendMode;
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        var sdl = _sdl ?? throw new InvalidOperationException("SDL input has not been initialized.");
+
+        var relative = mode is InputCursorMode.Disabled or InputCursorMode.Raw;
+        if (mode == InputCursorMode.Raw) sdl.SetHint(SdlApi.HintMouseRelativeModeWarp, "0");
+        if (sdl.SetRelativeMouseMode(relative ? SdlBool.True : SdlBool.False) != 0)
+            throw new InvalidOperationException($"SDL could not change relative mouse mode: {sdl.GetErrorS()}");
+
+        var showCursor = mode == InputCursorMode.Normal;
+        if (sdl.ShowCursor(showCursor ? SdlApi.Enable : SdlApi.Disable) < 0)
+            throw new InvalidOperationException($"SDL could not change cursor visibility: {sdl.GetErrorS()}");
     }
 
-    internal void Initialize(IView view)
+    internal void Initialize(SdlApi sdl, IWindowController view)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(sdl);
         ArgumentNullException.ThrowIfNull(view);
-        if (_context is not null) throw new InvalidOperationException("Input has already been initialized.");
+        if (_sdl is not null) throw new InvalidOperationException("Input has already been initialized.");
 
+        _sdl = sdl;
         _view = view;
-        _context = view.CreateInput();
-        _keyboard = _context.Keyboards.FirstOrDefault();
-        _mouse = _context.Mice.FirstOrDefault();
-
-        if (_keyboard is not null)
-        {
-            _keyboard.KeyDown += OnKeyDown;
-            _keyboard.KeyUp += OnKeyUp;
-            _keyboard.KeyChar += OnKeyChar;
-            _keyboard.BeginInput();
-        }
-
-        if (_mouse is not null)
-        {
-            MousePosition = _mouse.Position;
-            _mouse.MouseDown += OnMouseDown;
-            _mouse.MouseUp += OnMouseUp;
-            _mouse.MouseMove += OnMouseMove;
-            _mouse.Scroll += OnScroll;
-        }
+        var mouseX = 0;
+        var mouseY = 0;
+        sdl.GetMouseState(ref mouseX, ref mouseY);
+        MousePosition = new Vector2(mouseX, mouseY);
     }
 
     internal void EndFrame()
@@ -182,26 +172,7 @@ public sealed class InputManager : IInputService, IDisposable
     {
         if (_disposed) return;
 
-        if (_keyboard is not null)
-        {
-            _keyboard.KeyDown -= OnKeyDown;
-            _keyboard.KeyUp -= OnKeyUp;
-            _keyboard.KeyChar -= OnKeyChar;
-            _keyboard.EndInput();
-        }
-
-        if (_mouse is not null)
-        {
-            _mouse.MouseDown -= OnMouseDown;
-            _mouse.MouseUp -= OnMouseUp;
-            _mouse.MouseMove -= OnMouseMove;
-            _mouse.Scroll -= OnScroll;
-        }
-
-        _context?.Dispose();
-        _context = null;
-        _keyboard = null;
-        _mouse = null;
+        _sdl = null;
         _view = null;
         _keysDown.Clear();
         _keysPressed.Clear();
@@ -219,11 +190,6 @@ public sealed class InputManager : IInputService, IDisposable
         _disposed = true;
     }
 
-    private void OnKeyDown(IKeyboard keyboard, Key key, int scanCode)
-    {
-        ProcessKeyDown(TranslateKey(key));
-    }
-
     internal void ProcessKeyDown(InputKey inputKey)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -234,11 +200,6 @@ public sealed class InputManager : IInputService, IDisposable
         _keysPressed.Add(inputKey);
         UpdateActionTransitions(affectedActions);
         KeyPressed?.Invoke(inputKey);
-    }
-
-    private void OnKeyUp(IKeyboard keyboard, Key key, int scanCode)
-    {
-        ProcessKeyUp(TranslateKey(key));
     }
 
     internal void ProcessKeyUp(InputKey inputKey)
@@ -253,21 +214,11 @@ public sealed class InputManager : IInputService, IDisposable
         KeyReleased?.Invoke(inputKey);
     }
 
-    private void OnKeyChar(IKeyboard keyboard, char character)
-    {
-        ProcessCharacterTyped(character);
-    }
-
     internal void ProcessCharacterTyped(char character)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _textInput.Append(character);
         CharacterTyped?.Invoke(character);
-    }
-
-    private void OnMouseDown(IMouse mouse, MouseButton button)
-    {
-        ProcessMouseDown(TranslateMouseButton(button));
     }
 
     internal void ProcessMouseDown(InputMouseButton inputButton)
@@ -282,11 +233,6 @@ public sealed class InputManager : IInputService, IDisposable
         MouseButtonPressed?.Invoke(inputButton);
     }
 
-    private void OnMouseUp(IMouse mouse, MouseButton button)
-    {
-        ProcessMouseUp(TranslateMouseButton(button));
-    }
-
     internal void ProcessMouseUp(InputMouseButton inputButton)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -299,23 +245,17 @@ public sealed class InputManager : IInputService, IDisposable
         MouseButtonReleased?.Invoke(inputButton);
     }
 
-    private void OnMouseMove(IMouse mouse, Vector2 position)
-    {
-        ProcessMouseMove(position);
-    }
-
     internal void ProcessMouseMove(Vector2 position)
     {
+        ProcessMouseMove(position, position - MousePosition);
+    }
+
+    internal void ProcessMouseMove(Vector2 position, Vector2 delta)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var delta = position - MousePosition;
         MousePosition = position;
         MouseDelta += delta;
         MouseMoved?.Invoke(position);
-    }
-
-    private void OnScroll(IMouse mouse, ScrollWheel wheel)
-    {
-        ProcessScroll(new Vector2(wheel.X, wheel.Y));
     }
 
     internal void ProcessScroll(Vector2 delta)
@@ -323,6 +263,13 @@ public sealed class InputManager : IInputService, IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ScrollDelta += delta;
         Scrolled?.Invoke(delta);
+    }
+
+    internal void ProcessFocusLost()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        foreach (var key in _keysDown.ToArray()) ProcessKeyUp(key);
+        foreach (var button in _mouseButtonsDown.ToArray()) ProcessMouseUp(button);
     }
 
     private KeyValuePair<string, bool>[] CaptureAffectedActionStates(InputBinding binding)
@@ -356,23 +303,79 @@ public sealed class InputManager : IInputService, IDisposable
         return action.Trim();
     }
 
-    private static InputKey TranslateKey(Key key)
+    internal static InputKey TranslateScancode(Scancode scancode)
     {
-        return Enum.TryParse<InputKey>(key.ToString(), out var inputKey)
+        var name = scancode.ToString();
+        if (!name.StartsWith("Scancode", StringComparison.Ordinal)) return InputKey.Unknown;
+        var keyName = name["Scancode".Length..];
+
+        var translatedName = keyName switch
+        {
+            "0" => nameof(InputKey.Number0),
+            "1" => nameof(InputKey.Number1),
+            "2" => nameof(InputKey.Number2),
+            "3" => nameof(InputKey.Number3),
+            "4" => nameof(InputKey.Number4),
+            "5" => nameof(InputKey.Number5),
+            "6" => nameof(InputKey.Number6),
+            "7" => nameof(InputKey.Number7),
+            "8" => nameof(InputKey.Number8),
+            "9" => nameof(InputKey.Number9),
+            "Return" => nameof(InputKey.Enter),
+            "Equals" => nameof(InputKey.Equal),
+            "Grave" => nameof(InputKey.GraveAccent),
+            "Numlockclear" => nameof(InputKey.NumLock),
+            "KP0" => nameof(InputKey.Keypad0),
+            "KP1" => nameof(InputKey.Keypad1),
+            "KP2" => nameof(InputKey.Keypad2),
+            "KP3" => nameof(InputKey.Keypad3),
+            "KP4" => nameof(InputKey.Keypad4),
+            "KP5" => nameof(InputKey.Keypad5),
+            "KP6" => nameof(InputKey.Keypad6),
+            "KP7" => nameof(InputKey.Keypad7),
+            "KP8" => nameof(InputKey.Keypad8),
+            "KP9" => nameof(InputKey.Keypad9),
+            "KPPeriod" => nameof(InputKey.KeypadDecimal),
+            "KPDivide" => nameof(InputKey.KeypadDivide),
+            "KPMultiply" => nameof(InputKey.KeypadMultiply),
+            "KPMinus" => nameof(InputKey.KeypadSubtract),
+            "KPPlus" => nameof(InputKey.KeypadAdd),
+            "KPEnter" => nameof(InputKey.KeypadEnter),
+            "KPEquals" => nameof(InputKey.KeypadEqual),
+            "Lshift" => nameof(InputKey.ShiftLeft),
+            "Lctrl" => nameof(InputKey.ControlLeft),
+            "Lalt" => nameof(InputKey.AltLeft),
+            "Lgui" => nameof(InputKey.SuperLeft),
+            "Rshift" => nameof(InputKey.ShiftRight),
+            "Rctrl" => nameof(InputKey.ControlRight),
+            "Ralt" => nameof(InputKey.AltRight),
+            "Rgui" => nameof(InputKey.SuperRight),
+            "Application" => nameof(InputKey.Menu),
+            _ => keyName
+        };
+
+        return Enum.TryParse<InputKey>(translatedName, true, out var inputKey)
             ? inputKey
             : InputKey.Unknown;
     }
 
-    private static InputMouseButton TranslateMouseButton(MouseButton button)
+    internal static InputMouseButton TranslateMouseButton(byte button)
     {
-        return Enum.TryParse<InputMouseButton>(button.ToString(), out var inputButton)
-            ? inputButton
-            : InputMouseButton.Unknown;
-    }
-
-    private static bool TryGetBackendCursorMode(InputCursorMode mode, out CursorMode backendMode)
-    {
-        backendMode = default;
-        return Enum.IsDefined(mode) && Enum.TryParse(mode.ToString(), out backendMode);
+        return button switch
+        {
+            SdlApi.ButtonLeft => InputMouseButton.Left,
+            SdlApi.ButtonMiddle => InputMouseButton.Middle,
+            SdlApi.ButtonRight => InputMouseButton.Right,
+            SdlApi.ButtonX1 => InputMouseButton.Button4,
+            SdlApi.ButtonX2 => InputMouseButton.Button5,
+            6 => InputMouseButton.Button6,
+            7 => InputMouseButton.Button7,
+            8 => InputMouseButton.Button8,
+            9 => InputMouseButton.Button9,
+            10 => InputMouseButton.Button10,
+            11 => InputMouseButton.Button11,
+            12 => InputMouseButton.Button12,
+            _ => InputMouseButton.Unknown
+        };
     }
 }
