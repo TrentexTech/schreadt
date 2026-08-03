@@ -101,7 +101,9 @@ internal sealed class PlatformerPlayerLogic : ActorLogic
 
     private void TrackGroundContact(CollisionContact2D contact)
     {
-        if (contact.Other.CollisionLayer != ExampleCollisionLayers.World) return;
+        var isGround = contact.Other.CollisionLayer == ExampleCollisionLayers.World ||
+                       contact.Other.Owner is PushableCrate;
+        if (!isGround) return;
         if (contact.Normal.Y < -0.55) _groundContacts.Add(contact.Other);
         else _groundContacts.Remove(contact.Other);
     }
@@ -289,6 +291,174 @@ internal sealed class GoalPortal : Actor
         renderer.DrawCircle(Position, 0.27, new Vector4D<float>(0.06f, 0.12f, 0.3f, 1f));
         renderer.DrawCircle(Position + new Vector2D<double>(0.08 * Math.Sin(_orbitAngle), 0.08 * Math.Cos(_orbitAngle)),
             0.055, new Vector4D<float>(1f, 0.9f, 0.35f, 1f));
+    }
+}
+
+internal sealed class LaserScanner : Actor
+{
+    private const double MaximumBeamDistance = 4.5;
+    private static readonly CollisionQueryFilter2D BeamFilter = new(
+        CollisionLayerMask2D.FromLayers(ExampleCollisionLayers.Player, ExampleCollisionLayers.World),
+        includeTriggers: false);
+    private readonly Action _playerHit;
+    private double _angle;
+    private double _beamDistance = MaximumBeamDistance;
+
+    internal bool Armed { get; private set; } = true;
+
+    internal LaserScanner(
+        double startAngle,
+        double endAngle,
+        double sweepDuration,
+        Action playerHit)
+    {
+        if (!double.IsFinite(startAngle)) throw new ArgumentOutOfRangeException(nameof(startAngle));
+        if (!double.IsFinite(endAngle)) throw new ArgumentOutOfRangeException(nameof(endAngle));
+        if (!double.IsFinite(sweepDuration) || sweepDuration <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(sweepDuration));
+        ArgumentNullException.ThrowIfNull(playerHit);
+
+        _angle = startAngle;
+        _playerHit = playerHit;
+
+        var sweep = Tweens.To(() => _angle, value => _angle = value, endAngle, sweepDuration);
+        sweep.Easing = TweenEasings.SineInOut;
+        sweep.LoopMode = TweenLoopMode.Yoyo;
+        sweep.RepeatCount = Tween.RepeatForever;
+        AddComponent(new TweenPlayer()).Play(sweep);
+    }
+
+    internal void SetArmed(bool armed)
+    {
+        if (Armed == armed) return;
+        Armed = armed;
+        _beamDistance = armed ? MaximumBeamDistance : 0.0;
+    }
+
+    protected override void OnFixedUpdate(double dt)
+    {
+        base.OnFixedUpdate(dt);
+        if (!Armed)
+        {
+            _beamDistance = 0.0;
+            return;
+        }
+
+        var direction = new Vector2D<double>(Math.Cos(_angle), Math.Sin(_angle));
+        if (Scene is null || !Scene.Collisions.Raycast(
+                Position,
+                direction,
+                MaximumBeamDistance,
+                out var hit,
+                BeamFilter))
+        {
+            _beamDistance = MaximumBeamDistance;
+            return;
+        }
+
+        _beamDistance = hit.Distance;
+        if (hit.Collider.CollisionLayer == ExampleCollisionLayers.Player) _playerHit();
+    }
+
+    protected override void OnRender(IRenderContext2D renderer)
+    {
+        var direction = new Vector2D<double>(Math.Cos(_angle), Math.Sin(_angle));
+        var beamEnd = Position + direction * _beamDistance;
+        if (Armed && _beamDistance > 0.0)
+        {
+            renderer.DrawRectangle(
+                (Position + beamEnd) * 0.5,
+                new Vector2D<double>(_beamDistance, 0.035),
+                new Vector4D<float>(1f, 0.12f, 0.18f, 0.78f),
+                _angle);
+            renderer.DrawCircle(beamEnd, 0.065, new Vector4D<float>(1f, 0.4f, 0.2f, 0.82f));
+        }
+
+        renderer.DrawCircle(Position, 0.2, new Vector4D<float>(0.16f, 0.04f, 0.12f, 1f));
+        renderer.DrawCircle(Position, 0.105, Armed
+            ? new Vector4D<float>(1f, 0.2f, 0.24f, 1f)
+            : new Vector4D<float>(0.25f, 1f, 0.55f, 1f));
+    }
+}
+
+internal sealed class PushableCrate : Rectangle2D
+{
+    internal RigidBody2D Body { get; }
+    internal AxisAlignedBoxCollider2D Collider { get; }
+
+    internal PushableCrate()
+    {
+        Size = new Vector2D<double>(0.5, 0.5);
+        Color = new Vector4D<float>(0.78f, 0.5f, 0.16f, 1f);
+        Body = AddComponent(new RigidBody2D
+        {
+            BodyType = CollisionBodyType2D.Dynamic,
+            Mass = 0.75,
+            Friction = 0.8,
+            LinearDamping = 1.4,
+            MaximumSpeed = 4.5,
+            AllowSleep = true
+        });
+        Collider = AddComponent(new AxisAlignedBoxCollider2D(Size)
+        {
+            CollisionLayer = ExampleCollisionLayers.Mechanic,
+            CollisionMask = ExampleCollisionLayers.PushableMask
+        });
+    }
+
+    protected override void OnRender(IRenderContext2D renderer)
+    {
+        base.OnRender(renderer);
+        renderer.DrawRectangle(Position, Size * 0.68,
+            new Vector4D<float>(0.34f, 0.18f, 0.08f, 1f));
+        renderer.DrawRectangle(Position, new Vector2D<double>(Size.X * 0.12, Size.Y * 0.82),
+            new Vector4D<float>(1f, 0.72f, 0.24f, 0.9f), 0.72);
+    }
+}
+
+internal sealed class PressurePlate : Rectangle2D
+{
+    private readonly PushableCrate _crate;
+    private readonly LaserScanner _laser;
+
+    internal bool Pressed { get; private set; }
+    internal AxisAlignedBoxCollider2D Collider { get; }
+
+    internal PressurePlate(PushableCrate crate, LaserScanner laser)
+    {
+        ArgumentNullException.ThrowIfNull(crate);
+        ArgumentNullException.ThrowIfNull(laser);
+        _crate = crate;
+        _laser = laser;
+        Size = new Vector2D<double>(0.72, 0.1);
+        Color = new Vector4D<float>(1f, 0.56f, 0.16f, 1f);
+        Collider = AddComponent(new AxisAlignedBoxCollider2D(new Vector2D<double>(0.72, 0.24))
+        {
+            IsTrigger = true,
+            CollisionLayer = ExampleCollisionLayers.Mechanic,
+            CollisionMask = ExampleCollisionLayers.MechanicOnlyMask
+        });
+        Collider.CollisionEntered += HandleContact;
+        Collider.CollisionStayed += HandleContact;
+        Collider.CollisionExited += contact =>
+        {
+            if (ReferenceEquals(contact.Other.Owner, _crate)) SetPressed(false);
+        };
+    }
+
+    private void HandleContact(CollisionContact2D contact)
+    {
+        if (ReferenceEquals(contact.Other.Owner, _crate)) SetPressed(true);
+    }
+
+    private void SetPressed(bool pressed)
+    {
+        if (Pressed == pressed) return;
+        Pressed = pressed;
+        Color = pressed
+            ? new Vector4D<float>(0.25f, 1f, 0.55f, 1f)
+            : new Vector4D<float>(1f, 0.56f, 0.16f, 1f);
+        _laser.SetArmed(!pressed);
     }
 }
 

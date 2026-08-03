@@ -12,6 +12,7 @@ public sealed class ExampleGameLogic : GameLogic
     internal const string LevelTwo = "crystal-heights";
     internal const string LevelThree = "lunar-gardens";
     internal const string LevelFour = "clockwork-fortress";
+    internal const string LevelFive = "tempest-spire";
     private readonly IInputService? _inputOverride;
 
     private IInputService Input => _inputOverride ?? State.Input;
@@ -36,6 +37,7 @@ public sealed class ExampleGameLogic : GameLogic
         Reality.Scenes.RegisterScene(LevelTwo, () => new Scene1(Input));
         Reality.Scenes.RegisterScene(LevelThree, () => new Scene2(Input));
         Reality.Scenes.RegisterScene(LevelFour, () => new Scene3(Input));
+        Reality.Scenes.RegisterScene(LevelFive, () => new Scene4(Input));
         Reality.Scenes.LoadScene(LevelOne);
         Reality.MainCamera.OrthographicSize = 2.4;
 

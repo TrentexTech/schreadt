@@ -1,3 +1,4 @@
+using Schreadt_Engine.Animation.Tweening;
 using Schreadt_Engine.Collision;
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
@@ -98,6 +99,103 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         };
         Scene.AddChild(platform);
         return platform;
+    }
+
+    protected void AddUpdraft(double x, double y, double radius)
+    {
+        var playerBody = _player.GetComponent<RigidBody2D>()
+            ?? throw new InvalidOperationException("The platformer player needs a rigid body.");
+        var zone = new TriggerZone2D(radius)
+        {
+            Position = new Vector2D<double>(x, y),
+            RenderLayer = 16,
+            CollisionLayer = ExampleCollisionLayers.Mechanic,
+            CollisionMask = ExampleCollisionLayers.PlayerOnlyMask,
+            Color = new Vector4D<float>(0.2f, 0.92f, 1f, 0.13f),
+            Filter = candidate => ReferenceEquals(candidate, _player)
+        };
+        zone.Entered += _ =>
+        {
+            playerBody.GravityScale = 0.18;
+            const double launchVelocity = 4.2;
+            if (playerBody.Velocity.Y < launchVelocity)
+            {
+                playerBody.AddImpulse(new Vector2D<double>(
+                    0.0,
+                    (launchVelocity - playerBody.Velocity.Y) * playerBody.Mass));
+            }
+        };
+        zone.Stayed += _ => playerBody.AddForce(new Vector2D<double>(0.0, playerBody.Mass * 5.5));
+        zone.Exited += _ => playerBody.GravityScale = 1.0;
+
+        var pulse = Tweens.To(
+            () => zone.Color,
+            value => zone.Color = value,
+            new Vector4D<float>(0.38f, 0.96f, 1f, 0.28f),
+            0.65);
+        pulse.Easing = TweenEasings.SineInOut;
+        pulse.LoopMode = TweenLoopMode.Yoyo;
+        pulse.RepeatCount = Tween.RepeatForever;
+        zone.AddComponent(new TweenPlayer()).Play(pulse);
+        Scene.AddChild(zone);
+
+        for (var index = 0; index < 3; index++)
+        {
+            var arrow = new Triangle
+            {
+                Position = new Vector2D<double>(x, y - 0.42 + index * 0.3),
+                Scale = new Vector2D<double>(0.2, 0.15),
+                RenderLayer = 17,
+                Color = new Vector4D<float>(0.62f, 0.98f, 1f, 0.72f)
+            };
+            var rise = Tweens.To(
+                () => arrow.Position,
+                value => arrow.Position = value,
+                arrow.Position + new Vector2D<double>(0.0, 0.5),
+                0.8);
+            rise.Delay = index * 0.13;
+            rise.Easing = TweenEasings.CubicOut;
+            rise.RepeatCount = Tween.RepeatForever;
+            arrow.AddComponent(new TweenPlayer()).Play(rise);
+            Scene.AddChild(arrow);
+        }
+    }
+
+    protected LaserScanner AddLaserScanner(
+        double x,
+        double y,
+        double startAngle,
+        double endAngle,
+        double sweepDuration)
+    {
+        var scanner = new LaserScanner(startAngle, endAngle, sweepDuration, _playerLogic.HitHazard)
+        {
+            Position = new Vector2D<double>(x, y),
+            RenderLayer = 24
+        };
+        Scene.AddChild(scanner);
+        return scanner;
+    }
+
+    protected void AddCratePressurePlate(
+        LaserScanner laser,
+        double crateX,
+        double crateY,
+        double plateX,
+        double plateY)
+    {
+        var crate = new PushableCrate
+        {
+            Position = new Vector2D<double>(crateX, crateY),
+            RenderLayer = 21
+        };
+        var plate = new PressurePlate(crate, laser)
+        {
+            Position = new Vector2D<double>(plateX, plateY),
+            RenderLayer = 18
+        };
+        Scene.AddChild(crate);
+        Scene.AddChild(plate);
     }
 
     protected void AddSpikes(double centerX, double groundTop, int count)
@@ -220,7 +318,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         panel.Padding = 8;
         panel.Spacing = 4;
         panel.BackgroundColor = new Vector4D<float>(0.035f, 0.055f, 0.11f, 0.88f);
-        var heading = panel.AddLabel($"LEVEL {_number}/4");
+        var heading = panel.AddLabel($"LEVEL {_number}/5");
         heading.Color = new Vector4D<float>(0.38f, 0.9f, 1f, 1f);
         panel.AddLabel(_title).Scale = 1.3f;
         if (HudNote is not null)
@@ -270,6 +368,7 @@ internal sealed class LevelBackdrop : GameObject
             1 => new Vector4D<float>(0.32f, 0.72f, 0.91f, 1f),
             2 => new Vector4D<float>(0.09f, 0.1f, 0.28f, 1f),
             3 => new Vector4D<float>(0.21f, 0.12f, 0.39f, 1f),
+            5 => new Vector4D<float>(0.035f, 0.18f, 0.25f, 1f),
             _ => new Vector4D<float>(0.24f, 0.09f, 0.08f, 1f)
         };
         var farHill = _level switch
@@ -277,6 +376,7 @@ internal sealed class LevelBackdrop : GameObject
             1 => new Vector4D<float>(0.19f, 0.52f, 0.48f, 1f),
             2 => new Vector4D<float>(0.21f, 0.19f, 0.46f, 1f),
             3 => new Vector4D<float>(0.31f, 0.2f, 0.5f, 1f),
+            5 => new Vector4D<float>(0.08f, 0.4f, 0.46f, 1f),
             _ => new Vector4D<float>(0.38f, 0.18f, 0.14f, 1f)
         };
         var nearHill = _level switch
@@ -284,6 +384,7 @@ internal sealed class LevelBackdrop : GameObject
             1 => new Vector4D<float>(0.14f, 0.38f, 0.37f, 1f),
             2 => new Vector4D<float>(0.14f, 0.15f, 0.36f, 1f),
             3 => new Vector4D<float>(0.18f, 0.13f, 0.36f, 1f),
+            5 => new Vector4D<float>(0.04f, 0.24f, 0.31f, 1f),
             _ => new Vector4D<float>(0.2f, 0.12f, 0.13f, 1f)
         };
 
@@ -293,6 +394,7 @@ internal sealed class LevelBackdrop : GameObject
             1 => new Vector4D<float>(1f, 0.86f, 0.3f, 1f),
             3 => new Vector4D<float>(0.92f, 0.75f, 1f, 0.95f),
             4 => new Vector4D<float>(1f, 0.4f, 0.18f, 0.9f),
+            5 => new Vector4D<float>(0.55f, 1f, 0.94f, 0.9f),
             _ => new Vector4D<float>(0.74f, 0.8f, 1f, 0.9f)
         });
 

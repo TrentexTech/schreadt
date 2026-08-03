@@ -6,7 +6,7 @@ namespace Example_Game.Logic.scenes;
 internal sealed class Scene3 : PlatformerLevelLogic
 {
     internal Scene3(IInputState input)
-        : base(input, 4, "CLOCKWORK FORTRESS", null)
+        : base(input, 4, "CLOCKWORK FORTRESS", ExampleGameLogic.LevelFive)
     {
     }
 
