@@ -82,7 +82,7 @@ public sealed class Renderer : IDisposable
         """;
 
     private readonly GL _gl;
-    private readonly AssetCatalog? _assets;
+    private readonly IAssetProvider? _assets;
     private readonly Dictionary<string, Texture2D> _textures = new(StringComparer.Ordinal);
     private readonly uint _circleVertexArray;
     private readonly uint _circleVertexBuffer;
@@ -108,7 +108,7 @@ public sealed class Renderer : IDisposable
     private bool _renderingFrame;
     private bool _disposed;
 
-    public Renderer(GL gl, AssetCatalog? assets = null)
+    public Renderer(GL gl, IAssetProvider? assets = null)
     {
         _gl = gl;
         _assets = assets;
@@ -290,7 +290,7 @@ public sealed class Renderer : IDisposable
         if (_assets is null)
             throw new InvalidOperationException("This renderer was created without an asset catalog.");
 
-        var image = _assets.GetImage(imageAssetId);
+        var image = _assets.Get<ImageAsset>(imageAssetId);
         if (_textures.TryGetValue(image.Id, out var cached)) return cached;
 
         var texture = UploadTexture(image);

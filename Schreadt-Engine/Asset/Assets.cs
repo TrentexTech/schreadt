@@ -1,12 +1,13 @@
-using Newtonsoft.Json;
-
 namespace Schreadt_Engine.Asset;
 
-public sealed class AssetCatalog : IDisposable
+public sealed class AssetCatalog : IAssetProvider, IDisposable
 {
+    private readonly record struct DecodedAssetKey(string Id, Type AssetType);
+
     private readonly Dictionary<string, AssetRecord> _assets = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, ImageAsset> _images = new(StringComparer.Ordinal);
-    private readonly List<AssetLibrary> _libraries = [];
+    private readonly Dictionary<Type, List<object>> _decoders = [];
+    private readonly Dictionary<DecodedAssetKey, object> _decodedAssets = [];
+    private readonly List<IAssetSource> _sources = [];
     private bool _disposed;
 
     public int Count
@@ -29,6 +30,7 @@ public sealed class AssetCatalog : IDisposable
 
     private AssetCatalog()
     {
+        RegisterDecoder(new ImageAssetDecoder());
     }
 
     public static AssetCatalog LoadFromDirectory(string contentRoot, IEnumerable<string> manifestNames)
@@ -48,15 +50,7 @@ public sealed class AssetCatalog : IDisposable
 
                 var manifestPath = Path.Combine(assetsDirectory, $"{manifestName}.json");
                 var manifest = AssetLibraryManifest.Load(manifestPath);
-                var library = AssetLibrary.Create(manifest);
-                catalog._libraries.Add(library);
-
-                foreach (var asset in library.LoadAssets())
-                {
-                    if (!catalog._assets.TryAdd(asset.Id, asset))
-                        throw new InvalidDataException(
-                            $"Asset id '{asset.Id}' from library '{library.Name}' is already provided by another library.");
-                }
+                catalog.AddSource(AssetLibrary.Create(manifest));
             }
 
             return catalog;
@@ -66,6 +60,47 @@ public sealed class AssetCatalog : IDisposable
             catalog.Dispose();
             throw;
         }
+    }
+
+    public static AssetCatalog LoadFromSources(IEnumerable<IAssetSource> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        var catalog = new AssetCatalog();
+        try
+        {
+            foreach (var source in sources)
+            {
+                ArgumentNullException.ThrowIfNull(source);
+                catalog.AddSource(source);
+            }
+
+            return catalog;
+        }
+        catch
+        {
+            catalog.Dispose();
+            throw;
+        }
+    }
+
+    public void RegisterDecoder<T>(IAssetDecoder<T> decoder, bool replaceExisting = false)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(decoder);
+
+        if (!_decoders.TryGetValue(typeof(T), out var registrations))
+        {
+            registrations = [];
+            _decoders.Add(typeof(T), registrations);
+        }
+
+        if (replaceExisting) registrations.Clear();
+        if (registrations.Contains(decoder))
+            throw new InvalidOperationException($"The decoder is already registered for {typeof(T).Name}.");
+
+        registrations.Add(decoder);
+        RemoveDecodedAssets(typeof(T));
     }
 
     public bool Contains(string id)
@@ -93,39 +128,67 @@ public sealed class AssetCatalog : IDisposable
         return Get(id).GetText();
     }
 
+    public T Get<T>(string id)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var asset = Get(id);
+        var cacheKey = new DecodedAssetKey(asset.Id, typeof(T));
+        if (_decodedAssets.TryGetValue(cacheKey, out var cached)) return (T)cached;
+
+        if (!_decoders.TryGetValue(typeof(T), out var registrations))
+            throw new InvalidOperationException($"No asset decoder is registered for {typeof(T).Name}.");
+
+        var decoder = registrations
+            .Cast<IAssetDecoder<T>>()
+            .FirstOrDefault(candidate => candidate.CanDecode(asset));
+        if (decoder is null)
+            throw new InvalidDataException(
+                $"None of the registered {typeof(T).Name} decoders accepts asset '{asset.Id}' with content type '{asset.ContentType ?? "unknown"}'.");
+
+        var decoded = decoder.Decode(asset);
+        if (decoded is null)
+            throw new InvalidDataException($"The {typeof(T).Name} decoder returned null for asset '{asset.Id}'.");
+
+        _decodedAssets.Add(cacheKey, decoded);
+        return decoded;
+    }
+
     public T GetJson<T>(string id)
     {
-        var asset = Get(id);
-        try
-        {
-            var value = JsonConvert.DeserializeObject<T>(asset.GetText());
-            return value ?? throw new InvalidDataException($"JSON asset '{asset.Id}' deserialized to null.");
-        }
-        catch (JsonException exception)
-        {
-            throw new InvalidDataException($"Asset '{asset.Id}' does not contain valid JSON for {typeof(T).Name}.", exception);
-        }
+        return AssetProviderExtensions.GetJson<T>(this, id);
     }
 
     public ImageAsset GetImage(string id)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        var asset = Get(id);
-        if (_images.TryGetValue(asset.Id, out var image)) return image;
-
-        image = ImageAsset.Decode(asset);
-        _images.Add(asset.Id, image);
-        return image;
+        return Get<ImageAsset>(id);
     }
 
     public void Dispose()
     {
         if (_disposed) return;
 
-        foreach (var library in _libraries) library.Dispose();
-        _libraries.Clear();
-        _images.Clear();
+        foreach (var source in _sources) source.Dispose();
+        _sources.Clear();
+        _decodedAssets.Clear();
+        _decoders.Clear();
         _assets.Clear();
         _disposed = true;
+    }
+
+    private void AddSource(IAssetSource source)
+    {
+        _sources.Add(source);
+        foreach (var asset in source.LoadAssets())
+        {
+            if (!_assets.TryAdd(asset.Id, asset))
+                throw new InvalidDataException(
+                    $"Asset id '{asset.Id}' from source '{source.Name}' is already provided by another source.");
+        }
+    }
+
+    private void RemoveDecodedAssets(Type assetType)
+    {
+        foreach (var key in _decodedAssets.Keys.Where(key => key.AssetType == assetType).ToArray())
+            _decodedAssets.Remove(key);
     }
 }

@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace Schreadt_Engine.Asset;
 
-public abstract class AssetLibrary : IDisposable
+public abstract class AssetLibrary : IAssetSource
 {
     private bool _initialized;
 
@@ -27,7 +27,7 @@ public abstract class AssetLibrary : IDisposable
         return library;
     }
 
-    internal IReadOnlyCollection<AssetRecord> LoadAssets()
+    public IReadOnlyCollection<AssetRecord> LoadAssets()
     {
         if (!_initialized) throw new InvalidOperationException("Asset libraries must be created from a manifest.");
         return Load();

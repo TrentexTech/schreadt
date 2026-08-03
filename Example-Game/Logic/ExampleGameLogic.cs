@@ -1,4 +1,5 @@
 using Example_Game.Logic.scenes;
+using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Core;
 using Silk.NET.Input;
@@ -40,7 +41,8 @@ public class ExampleGameLogic : GameLogic
 
     public override void Init()
     {
-        var physicsTuning = State.Assets.GetJson<ExamplePhysicsTuning>("example/physics-tuning");
+        State.Assets.RegisterDecoder(new JsonAssetDecoder<ExamplePhysicsTuning>());
+        var physicsTuning = State.Assets.Get<ExamplePhysicsTuning>("example/physics-tuning");
         Reality.Scenes.RegisterScene(MainScene, () => new Scene0(physicsTuning));
         Reality.Scenes.RegisterScene(AlternateScene, () => new Scene1(physicsTuning));
         Reality.Scenes.LoadScene(MainScene);
