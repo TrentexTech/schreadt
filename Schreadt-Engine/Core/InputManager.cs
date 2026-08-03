@@ -117,6 +117,9 @@ public sealed class InputManager : IInputService, IDisposable
         _actionBindings[normalizedAction] = bindings.ToHashSet();
         _actionsPressed.Remove(normalizedAction);
         _actionsReleased.Remove(normalizedAction);
+        EngineLog.Debug(
+            $"Action '{normalizedAction}' bound to {string.Join(", ", bindings.Select(DescribeBinding))}.",
+            "Input");
     }
 
     public bool RemoveAction(string action)
@@ -125,7 +128,9 @@ public sealed class InputManager : IInputService, IDisposable
         var normalizedAction = NormalizeAction(action);
         _actionsPressed.Remove(normalizedAction);
         _actionsReleased.Remove(normalizedAction);
-        return _actionBindings.Remove(normalizedAction);
+        var removed = _actionBindings.Remove(normalizedAction);
+        if (removed) EngineLog.Debug($"Removed input action '{normalizedAction}'.", "Input");
+        return removed;
     }
 
     public bool IsCursorModeSupported(InputCursorMode mode)
@@ -148,6 +153,7 @@ public sealed class InputManager : IInputService, IDisposable
         var showCursor = mode == InputCursorMode.Normal;
         if (sdl.ShowCursor(showCursor ? SdlApi.Enable : SdlApi.Disable) < 0)
             throw new InvalidOperationException($"SDL could not change cursor visibility: {sdl.GetErrorS()}");
+        EngineLog.Information($"Cursor mode changed to {mode}.", "Input");
     }
 
     internal void Initialize(SdlApi sdl, IWindowController view)
@@ -163,6 +169,9 @@ public sealed class InputManager : IInputService, IDisposable
         var mouseY = 0;
         sdl.GetMouseState(ref mouseX, ref mouseY);
         MousePosition = new Vector2(mouseX, mouseY);
+        EngineLog.Information(
+            $"Input initialized; cursor at ({mouseX}, {mouseY}), action count: {_actionBindings.Count}.",
+            "Input");
     }
 
     internal void EndFrame()
@@ -216,6 +225,7 @@ public sealed class InputManager : IInputService, IDisposable
         MouseDelta = Vector2.Zero;
         ScrollDelta = Vector2.Zero;
         _disposed = true;
+        EngineLog.Debug("Input resources disposed.", "Input");
     }
 
     internal void ProcessKeyDown(InputKey inputKey)
@@ -296,6 +306,9 @@ public sealed class InputManager : IInputService, IDisposable
     internal void ProcessFocusLost()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        EngineLog.Debug(
+            $"Input focus lost; releasing {_keysDown.Count} key(s) and {_mouseButtonsDown.Count} mouse button(s).",
+            "Input");
         foreach (var key in _keysDown.ToArray()) ProcessKeyUp(key);
         foreach (var button in _mouseButtonsDown.ToArray()) ProcessMouseUp(button);
     }
@@ -329,6 +342,12 @@ public sealed class InputManager : IInputService, IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(action);
         return action.Trim();
+    }
+
+    private static string DescribeBinding(InputBinding binding)
+    {
+        if (binding.Key is { } key) return $"key:{key}";
+        return $"mouse:{binding.MouseButton}";
     }
 
     internal static InputKey TranslateScancode(Scancode scancode)

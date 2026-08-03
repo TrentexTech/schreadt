@@ -36,9 +36,12 @@ internal static class Config
         var configString = FileHandler.ReadFileAsString(FileType.GameConfig);
         Data = Parse(configString, path);
         EngineLog.Information(
-            $"Configuration loaded: {Data.Window.DefaultSize.Width}x{Data.Window.DefaultSize.Height}, " +
+            $"Configuration loaded from '{path}': title '{Data.Window.Title}', " +
+            $"window {Data.Window.DefaultSize.Width}x{Data.Window.DefaultSize.Height}, " +
             $"{Data.AssetLibraries.Count} asset library/libraries.",
             "Configuration");
+        if (Data.AssetLibraries.Count > 0)
+            EngineLog.Debug($"Configured asset libraries: {string.Join(", ", Data.AssetLibraries)}.", "Configuration");
     }
 
     internal static ConfigData Parse(string configString, string sourcePath = "config/config.json")

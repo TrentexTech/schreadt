@@ -24,7 +24,10 @@ public sealed class RuntimeController
             if (!double.IsFinite(value) || value <= 0.0)
                 throw new ArgumentOutOfRangeException(nameof(value), "Time scale must be finite and greater than zero.");
 
+            if (_timeScale == value) return;
+            var previous = _timeScale;
             _timeScale = value;
+            EngineLog.Information($"Time scale changed from {previous:G4} to {value:G4}.", "Runtime");
         }
     }
 
@@ -67,11 +70,13 @@ public sealed class RuntimeController
             throw new InvalidOperationException("Single-step is only available while the runtime is paused.");
 
         _singleStepPending = true;
+        EngineLog.Debug("Queued one simulation frame while paused.", "Runtime");
     }
 
     internal void AcquirePauseRequest()
     {
         _pauseRequestCount = checked(_pauseRequestCount + 1);
+        EngineLog.Trace($"Pause request acquired; active requests: {_pauseRequestCount}.", "Runtime");
         RefreshPauseState();
     }
 
@@ -80,6 +85,7 @@ public sealed class RuntimeController
         if (_pauseRequestCount <= 0)
             throw new InvalidOperationException("There is no runtime pause request to release.");
         _pauseRequestCount--;
+        EngineLog.Trace($"Pause request released; active requests: {_pauseRequestCount}.", "Runtime");
         RefreshPauseState();
     }
 
@@ -121,6 +127,11 @@ public sealed class RuntimeController
         _isPaused = paused;
         _singleStepPending = false;
         _physicsClock.Reset();
+        EngineLog.Information(
+            paused
+                ? $"Simulation paused (manual: {_manualPause}; pause requests: {_pauseRequestCount})."
+                : "Simulation resumed.",
+            "Runtime");
         PauseStateChanged?.Invoke(paused);
     }
 }

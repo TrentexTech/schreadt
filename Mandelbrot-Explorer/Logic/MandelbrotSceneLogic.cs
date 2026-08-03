@@ -63,4 +63,9 @@ internal sealed class MandelbrotSceneLogic(IInputState input) : SceneLogic
         var view = _canvas.View;
         _stats.Text = $"CENTER {view.CenterX:G9}, {view.CenterY:G9}\nWIDTH {view.Width:G6}   ITER {view.MaxIterations}\nPALETTE {_canvas.PaletteName}";
     }
+
+    public override void Shutdown()
+    {
+        if (_canvas is not null) _canvas.Changed -= UpdateStats;
+    }
 }

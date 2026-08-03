@@ -1,5 +1,7 @@
 namespace Schreadt_Engine.Asset;
 
+using Schreadt_Engine.Core;
+
 public sealed class AssetCatalog : IAssetProvider, IDisposable
 {
     private readonly record struct DecodedAssetKey(string Id, Type AssetType);
@@ -39,6 +41,7 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
         ArgumentNullException.ThrowIfNull(manifestNames);
 
         var catalog = new AssetCatalog();
+        EngineLog.Debug($"Building asset catalog from content root '{Path.GetFullPath(contentRoot)}'.", "Assets");
         try
         {
             var assetsDirectory = Path.Combine(Path.GetFullPath(contentRoot), "assets");
@@ -49,6 +52,7 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
                     throw new ArgumentException($"Manifest name '{manifestName}' must not contain path separators.", nameof(manifestNames));
 
                 var manifestPath = Path.Combine(assetsDirectory, $"{manifestName}.json");
+                EngineLog.Debug($"Loading asset manifest '{manifestPath}'.", "Assets");
                 var manifest = AssetLibraryManifest.Load(manifestPath);
                 catalog.AddSource(AssetLibrary.Create(manifest));
             }
@@ -101,6 +105,9 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
 
         registrations.Add(decoder);
         RemoveDecodedAssets(typeof(T));
+        EngineLog.Debug(
+            $"Registered decoder {decoder.GetType().Name} for {typeof(T).Name}; replace existing: {replaceExisting}.",
+            "Assets");
     }
 
     public bool Contains(string id)
@@ -133,7 +140,11 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         var asset = Get(id);
         var cacheKey = new DecodedAssetKey(asset.Id, typeof(T));
-        if (_decodedAssets.TryGetValue(cacheKey, out var cached)) return (T)cached;
+        if (_decodedAssets.TryGetValue(cacheKey, out var cached))
+        {
+            EngineLog.Trace($"Decoded asset cache hit: '{asset.Id}' as {typeof(T).Name}.", "Assets");
+            return (T)cached;
+        }
 
         if (!_decoders.TryGetValue(typeof(T), out var registrations))
             throw new InvalidOperationException($"No asset decoder is registered for {typeof(T).Name}.");
@@ -150,6 +161,9 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
             throw new InvalidDataException($"The {typeof(T).Name} decoder returned null for asset '{asset.Id}'.");
 
         _decodedAssets.Add(cacheKey, decoded);
+        EngineLog.Debug(
+            $"Decoded asset '{asset.Id}' as {typeof(T).Name} using {decoder.GetType().Name}.",
+            "Assets");
         return decoded;
     }
 
@@ -167,6 +181,10 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
     {
         if (_disposed) return;
 
+        EngineLog.Debug(
+            $"Disposing asset catalog with {_assets.Count} asset(s), {_decodedAssets.Count} decoded cache entry/entries, " +
+            $"and {_sources.Count} source(s).",
+            "Assets");
         foreach (var source in _sources) source.Dispose();
         _sources.Clear();
         _decodedAssets.Clear();
@@ -178,12 +196,20 @@ public sealed class AssetCatalog : IAssetProvider, IDisposable
     private void AddSource(IAssetSource source)
     {
         _sources.Add(source);
-        foreach (var asset in source.LoadAssets())
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        var loadedAssets = source.LoadAssets();
+        foreach (var asset in loadedAssets)
         {
             if (!_assets.TryAdd(asset.Id, asset))
                 throw new InvalidDataException(
                     $"Asset id '{asset.Id}' from source '{source.Name}' is already provided by another source.");
         }
+
+        timer.Stop();
+        EngineLog.Information(
+            $"Loaded asset source '{source.Name}' with {loadedAssets.Count} asset(s) in " +
+            $"{timer.Elapsed.TotalMilliseconds:F1} ms.",
+            "Assets");
     }
 
     private void RemoveDecodedAssets(Type assetType)

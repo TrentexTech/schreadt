@@ -40,6 +40,8 @@ public sealed class SceneManager
         {
             throw new InvalidOperationException($"A scene named '{name}' is already registered.");
         }
+
+        EngineLog.Debug($"Registered scene '{name}'. Total registered scenes: {_sceneFactories.Count}.", "Scenes");
     }
 
     public bool IsSceneRegistered(string name)
@@ -61,7 +63,13 @@ public sealed class SceneManager
             throw new KeyNotFoundException($"No scene named '{name}' has been registered.");
         }
 
+        var replacedRequest = _pendingSceneName;
         _pendingSceneName = name;
+        EngineLog.Debug(
+            replacedRequest is null
+                ? $"Queued scene load '{name}'."
+                : $"Replaced pending scene load '{replacedRequest}' with '{name}'.",
+            "Scenes");
     }
 
     public void ReloadCurrentScene()
@@ -77,6 +85,7 @@ public sealed class SceneManager
         if (_initialized) return;
 
         _initialized = true;
+        EngineLog.Debug($"Scene manager initializing with {_sceneFactories.Count} registered scene(s).", "Scenes");
         ApplyPendingSceneChange();
 
         if (CurrentScene is null)
@@ -119,6 +128,7 @@ public sealed class SceneManager
         CurrentScene = null;
         scene.Unload();
         _gui?.RemoveLayer(scene.Gui);
+        EngineLog.Information($"Scene unloaded during shutdown: {scene.Name}.", "Scenes");
         SceneUnloaded?.Invoke(scene);
     }
 
@@ -128,10 +138,23 @@ public sealed class SceneManager
 
         var sceneName = _pendingSceneName;
         _pendingSceneName = null;
+        var loadTimer = System.Diagnostics.Stopwatch.StartNew();
+        EngineLog.Debug(
+            $"Loading scene '{sceneName}' (previous: '{CurrentSceneName ?? "none"}').",
+            "Scenes");
 
         var factory = _sceneFactories[sceneName];
-        var logic = factory()
-            ?? throw new InvalidOperationException($"The factory for scene '{sceneName}' returned null.");
+        SceneLogic logic;
+        try
+        {
+            logic = factory()
+                ?? throw new InvalidOperationException($"The factory for scene '{sceneName}' returned null.");
+        }
+        catch (Exception exception)
+        {
+            EngineLog.Error($"Scene factory for '{sceneName}' failed.", exception, "Scenes");
+            throw;
+        }
         var nextScene = new Scene(sceneName, logic, _runtime);
         var previousScene = CurrentScene;
 
@@ -141,8 +164,9 @@ public sealed class SceneManager
         {
             nextScene.Init();
         }
-        catch
+        catch (Exception exception)
         {
+            EngineLog.Error($"Scene '{sceneName}' failed during initialization.", exception, "Scenes");
             CurrentScene = previousScene;
             nextScene.Unload();
             _gui?.RemoveLayer(nextScene.Gui);
@@ -157,7 +181,11 @@ public sealed class SceneManager
             SceneUnloaded?.Invoke(previousScene);
         }
 
-        EngineLog.Information($"Scene loaded: {nextScene.Name}.", "Scenes");
+        loadTimer.Stop();
+        EngineLog.Information(
+            $"Scene loaded: {nextScene.Name} using {logic.GetType().Name} in " +
+            $"{loadTimer.Elapsed.TotalMilliseconds:F1} ms.",
+            "Scenes");
         SceneLoaded?.Invoke(nextScene);
     }
 

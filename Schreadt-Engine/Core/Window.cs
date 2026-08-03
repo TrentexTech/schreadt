@@ -85,6 +85,8 @@ public sealed unsafe class Window : IWindowController
 
             if (_loaded) ApplyDisplayState(currentState, value);
             _displayState = value;
+            if (currentState != value)
+                EngineLog.Information($"Window display state changed from {currentState} to {value}.", "Window");
         }
     }
 
@@ -94,6 +96,7 @@ public sealed unsafe class Window : IWindowController
         set
         {
             if (_loaded) SetSwapInterval(value);
+            if (_vsync != value) EngineLog.Information($"VSync {(value ? "enabled" : "disabled")}.", "Window");
             _vsync = value;
         }
     }
@@ -105,6 +108,7 @@ public sealed unsafe class Window : IWindowController
         _app = app;
         _title = Config.Data.Window.Title;
         _size = new Vector2D<int>(Config.Data.Window.DefaultSize.Width, Config.Data.Window.DefaultSize.Height);
+        EngineLog.Debug($"Window configured as '{_title}' at {_size.X}x{_size.Y}.", "Window");
     }
 
     internal void Run()
@@ -138,11 +142,15 @@ public sealed unsafe class Window : IWindowController
 
     public void RequestClose()
     {
+        if (!_closeRequested) EngineLog.Debug("Window close requested.", "Window");
         _closeRequested = true;
     }
 
     private void Load()
     {
+        EngineLog.Information(
+            $"Loading SDL video and OpenGL 3.3 core window '{_title}' at {_size.X}x{_size.Y}.",
+            "Window");
         _sdl = SdlApi.GetApi();
         ThrowIfSdlError(_sdl.Init(SdlApi.InitVideo | SdlApi.InitEvents), "initialize SDL");
         _sdlInitialized = true;
@@ -181,11 +189,17 @@ public sealed unsafe class Window : IWindowController
         _app.Input.Initialize(_sdl, this);
         _sdl.StartTextInput();
         ResizeRenderer();
-        EngineLog.Information("SDL window, OpenGL context, and SDL_PollEvent loop loaded.", "Window");
+        var framebuffer = FramebufferSize;
+        EngineLog.Information(
+            $"Window loaded. Window: {Size.X}x{Size.Y}; framebuffer: {framebuffer.X}x{framebuffer.Y}; " +
+            $"viewport: {_renderer.ViewportSize.X}x{_renderer.ViewportSize.Y} at " +
+            $"({_renderer.ViewportOffset.X}, {_renderer.ViewportOffset.Y}); VSync: {_vsync}.",
+            "Window");
     }
 
     private void RunMainLoop()
     {
+        EngineLog.Information("Main loop started.", "Window");
         var previousTimestamp = Stopwatch.GetTimestamp();
 
         while (!_closeRequested)
@@ -203,6 +217,8 @@ public sealed unsafe class Window : IWindowController
             _app.Render(_renderer!, frameTime);
             _sdl!.GLSwapWindow(_window);
         }
+
+        EngineLog.Information($"Main loop exited after {_app.Runtime.FrameCount} frame(s).", "Window");
     }
 
     private void PollEvents()
@@ -263,6 +279,7 @@ public sealed unsafe class Window : IWindowController
                 break;
             case WindowEventID.Minimized:
                 if (!IsFullscreen(_displayState)) _displayState = WindowDisplayState.Minimized;
+                EngineLog.Debug("Window minimized.", "Window");
                 break;
             case WindowEventID.Maximized:
                 if (!IsFullscreen(_displayState))
@@ -270,6 +287,7 @@ public sealed unsafe class Window : IWindowController
                     _displayState = WindowDisplayState.Maximized;
                     _windowedState = WindowDisplayState.Maximized;
                 }
+                EngineLog.Debug("Window maximized.", "Window");
                 break;
             case WindowEventID.Restored:
                 if (!IsFullscreen(_displayState))
@@ -277,8 +295,10 @@ public sealed unsafe class Window : IWindowController
                     _displayState = WindowDisplayState.Normal;
                     _windowedState = WindowDisplayState.Normal;
                 }
+                EngineLog.Debug("Window restored.", "Window");
                 break;
             case WindowEventID.FocusLost:
+                EngineLog.Debug("Window focus lost.", "Window");
                 _app.Input.ProcessFocusLost();
                 break;
         }
@@ -343,6 +363,7 @@ public sealed unsafe class Window : IWindowController
             _sdl?.Dispose();
             _sdl = null;
             _loaded = false;
+            EngineLog.Information("Window and SDL resources closed.", "Window");
         }
     }
 
@@ -388,6 +409,7 @@ public sealed unsafe class Window : IWindowController
     private void SetSwapInterval(bool enabled)
     {
         ThrowIfSdlError(_sdl!.GLSetSwapInterval(enabled ? 1 : 0), $"{(enabled ? "enable" : "disable")} VSync");
+        EngineLog.Debug($"SDL swap interval set to {(enabled ? 1 : 0)}.", "Window");
     }
 
     private void SetGlAttribute(GLattr attribute, int value)

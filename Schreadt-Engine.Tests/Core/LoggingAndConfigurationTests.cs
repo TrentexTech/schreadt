@@ -103,6 +103,10 @@ public sealed class LoggingAndConfigurationTests
             Assert.Contains("[ERROR] [Assets] Asset decode failed.", contents);
             Assert.Contains("System.InvalidOperationException: bad pixels", contents);
             Assert.Contains("[INFORMATION] [Engine] Logging initialized.", contents);
+            Assert.Contains("Minimum level:", contents);
+            Assert.Contains($"File: {logPath}.", contents);
+            Assert.Contains("[INFORMATION] [Environment] Runtime:", contents);
+            Assert.Contains("[INFORMATION] [Logging] Logging is shutting down.", contents);
         }
         finally
         {

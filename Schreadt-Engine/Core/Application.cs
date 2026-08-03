@@ -16,6 +16,7 @@ internal class Application
 
     internal Application(GameLogic? gameLogic)
     {
+        EngineLog.Debug("Constructing engine subsystems.", "Application");
         Input = new InputManager();
         State.SetInput(Input);
         Gui = new GuiSystem(Config.Data.Window.DefaultSize.Height);
@@ -27,11 +28,17 @@ internal class Application
         State.SetCurrentReality(Reality);
         Window = new Window(this);
         State.SetWindow(Window);
+        EngineLog.Debug("Input, GUI, runtime, reality, and window subsystems constructed.", "Application");
     }
 
     internal void Init()
     {
+        EngineLog.Debug("Initializing reality and initial scene.", "Application");
         Reality.Init();
+        EngineLog.Information(
+            $"Application initialized with scene '{Reality.Scenes.CurrentSceneName}' and " +
+            $"{Reality.Scenes.RegisteredScenes.Count} registered scene(s).",
+            "Application");
     }
 
     internal void Start()
@@ -79,6 +86,11 @@ internal class Application
         if (_shutdown) return;
 
         _shutdown = true;
+        EngineLog.Information(
+            $"Application shutdown started at frame {Runtime.FrameCount}; active scene: " +
+            $"'{Reality.Scenes.CurrentSceneName ?? "none"}'.",
+            "Application");
         Reality.Shutdown();
+        EngineLog.Information("Application shutdown completed.", "Application");
     }
 }

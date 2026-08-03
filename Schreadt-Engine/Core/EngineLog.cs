@@ -140,13 +140,20 @@ public static class EngineLog
 
         if (initializationWarning is not null) Warning(initializationWarning, "Logging");
         Information(
-            $"Logging initialized. Runtime: {Environment.Version}; OS: {Environment.OSVersion}; " +
-            $"Process: {Environment.ProcessId}; Base directory: {AppContext.BaseDirectory}",
+            $"Logging initialized. Minimum level: {MinimumLevel}; " +
+            $"File: {CurrentLogFilePath ?? "unavailable"}.",
             "Engine");
+        Information(
+            $"Runtime: {Environment.Version}; OS: {Environment.OSVersion}; " +
+            $"64-bit process: {Environment.Is64BitProcess}; Process: {Environment.ProcessId}; " +
+            $"Base directory: {AppContext.BaseDirectory}",
+            "Environment");
     }
 
     internal static void Shutdown()
     {
+        if (_writer is not null) Information("Logging is shutting down.", "Logging");
+
         lock (Sync)
         {
             try

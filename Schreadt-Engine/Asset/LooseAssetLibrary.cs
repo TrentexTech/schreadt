@@ -1,5 +1,7 @@
 namespace Schreadt_Engine.Asset;
 
+using Schreadt_Engine.Core;
+
 public sealed class LooseAssetLibrary : AssetLibrary
 {
     protected override IReadOnlyCollection<AssetRecord> Load()
@@ -8,6 +10,9 @@ public sealed class LooseAssetLibrary : AssetLibrary
                                 ?? throw new InvalidDataException($"Manifest '{Manifest.ManifestPath}' has no parent directory.");
         var root = Path.GetFullPath(Path.Combine(manifestDirectory, Manifest.Root));
         EnsureContained(manifestDirectory, root, "root", Manifest.Root);
+        EngineLog.Debug(
+            $"Loading loose asset library '{Name}' from '{root}' with {Manifest.Assets.Count} manifest entry/entries.",
+            "Assets");
 
         var loaded = new List<AssetRecord>(Manifest.Assets.Count);
         foreach (var entry in Manifest.Assets)
@@ -21,6 +26,7 @@ public sealed class LooseAssetLibrary : AssetLibrary
                     path);
 
             loaded.Add(new AssetRecord(entry.Id, entry.ContentType, path, File.ReadAllBytes(path)));
+            EngineLog.Trace($"Loaded asset '{entry.Id}' from '{path}'.", "Assets");
         }
 
         return loaded.AsReadOnly();

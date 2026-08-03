@@ -115,6 +115,8 @@ public sealed class Renderer : IRenderer2D
     private bool _renderingFrame;
     private bool _disposed;
     private TextureSampling? _pixelTextureSampling;
+    private int _pixelBufferWidth;
+    private int _pixelBufferHeight;
 
     public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
@@ -159,6 +161,10 @@ public sealed class Renderer : IRenderer2D
         _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         _gl.Enable(EnableCap.Blend);
         _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        EngineLog.Information(
+            $"OpenGL renderer initialized; target aspect ratio: {_targetAspectRatio:F4}; " +
+            $"asset catalog: {(_assets is null ? "none" : $"{_assets.Count} asset(s)")}.",
+            "Renderer");
     }
 
     public void Render(Camera camera, GameObject obj, GuiSystem? gui = null)
@@ -199,6 +205,10 @@ public sealed class Renderer : IRenderer2D
 
         var openGlY = _framebufferHeight - _viewportY - _viewportHeight;
         _gl.Viewport(new Vector2D<int>(_viewportX, openGlY), new Vector2D<int>(_viewportWidth, _viewportHeight));
+        EngineLog.Debug(
+            $"Renderer resized: framebuffer {_framebufferWidth}x{_framebufferHeight}; " +
+            $"viewport {_viewportWidth}x{_viewportHeight} at ({_viewportX}, {_viewportY}).",
+            "Renderer");
     }
 
     internal static (Vector2D<int> Offset, Vector2D<int> Size) CalculateViewport(
@@ -360,6 +370,9 @@ public sealed class Renderer : IRenderer2D
 
         var texture = UploadTexture(image);
         _textures.Add(image.Id, texture);
+        EngineLog.Debug(
+            $"Uploaded texture '{image.Id}' ({image.Width}x{image.Height}) to the GPU.",
+            "Renderer");
         return texture;
     }
 
@@ -480,6 +493,12 @@ public sealed class Renderer : IRenderer2D
         _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
         SetPixelTextureSampling(sampling);
         _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
+        if (_pixelBufferWidth != pixelWidth || _pixelBufferHeight != pixelHeight)
+        {
+            _pixelBufferWidth = pixelWidth;
+            _pixelBufferHeight = pixelHeight;
+            EngineLog.Debug($"Pixel-buffer source changed to {pixelWidth}x{pixelHeight} RGBA.", "Renderer");
+        }
 
         fixed (byte* data = rgbaPixels)
         {
@@ -524,6 +543,7 @@ public sealed class Renderer : IRenderer2D
         _gl.DeleteProgram(_shaderProgram);
         _gl.Dispose();
         _disposed = true;
+        EngineLog.Information("Renderer resources disposed.", "Renderer");
     }
 
     private unsafe (uint VertexArray, uint VertexBuffer, int VertexCount) CreateCircleMesh()
