@@ -108,6 +108,8 @@ public sealed class Renderer : IRenderer2D
     private bool _renderingFrame;
     private bool _disposed;
 
+    public Vector2D<int> ViewportSize => new(_framebufferWidth, _framebufferHeight);
+
     public Renderer(GL gl, IAssetProvider? assets = null)
     {
         _gl = gl;
@@ -366,6 +368,23 @@ public sealed class Renderer : IRenderer2D
         }
 
         DrawDynamicBatch(glyphVertices, color, PrimitiveType.Triangles);
+    }
+
+    public void DrawScreenRectangle(
+        Vector2D<float> position,
+        Vector2D<float> size,
+        Vector4D<float> color)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_renderingFrame) throw new InvalidOperationException("GUI drawing must occur while rendering a frame.");
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y))
+            throw new ArgumentOutOfRangeException(nameof(position), "Screen position must be finite.");
+        if (!float.IsFinite(size.X) || !float.IsFinite(size.Y) || size.X < 0.0f || size.Y < 0.0f)
+            throw new ArgumentOutOfRangeException(nameof(size), "Screen size must be finite and non-negative.");
+
+        var vertices = new List<float>(12);
+        AddScreenQuad(vertices, position.X, position.Y, size.X, size.Y);
+        DrawDynamicBatch(vertices, color, PrimitiveType.Triangles);
     }
 
     public void Dispose()

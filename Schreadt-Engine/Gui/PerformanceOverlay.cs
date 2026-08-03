@@ -11,9 +11,15 @@ internal sealed class PerformanceOverlay
 
     internal PerformanceOverlay(GuiSystem gui)
     {
-        _label = gui.AddLabel("FPS: --\nFRAME: -- MS");
-        _label.Position = new Vector2D<float>(12.0f, 12.0f);
+        var panel = gui.AddPanel();
+        panel.Position = new Vector2D<float>(12.0f, 12.0f);
+        panel.Padding = 6.0f;
+        panel.Spacing = 0.0f;
+
+        _label = panel.AddLabel("FPS: --\nFRAME: -- MS");
         _label.Scale = 2.0f;
+        _label.Padding = 0.0f;
+        _label.BackgroundColor = Vector4D<float>.Zero;
     }
 
     internal void Update(double frameTime)

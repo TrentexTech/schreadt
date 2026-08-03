@@ -9,6 +9,8 @@ namespace Schreadt_Engine.Core;
 /// </summary>
 public interface IRenderContext2D
 {
+    Vector2D<int> ViewportSize { get; }
+
     void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color);
 
     void DrawRectangle(
@@ -40,6 +42,11 @@ public interface IRenderContext2D
         Vector4D<float> color,
         Vector4D<float> backgroundColor,
         float padding = 0.0f);
+
+    void DrawScreenRectangle(
+        Vector2D<float> position,
+        Vector2D<float> size,
+        Vector4D<float> color);
 }
 
 /// <summary>
