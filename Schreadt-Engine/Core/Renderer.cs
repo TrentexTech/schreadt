@@ -153,6 +153,7 @@ public sealed class Renderer : IRenderer2D
             _gl.Clear(ClearBufferMask.ColorBufferBit);
             if (obj is Scene { Background.Enabled: true } scene) DrawGrid(scene.Background);
             obj.Render(this);
+            if (obj is Scene debugScene) debugScene.Collisions.DrawDiagnostics(this);
             gui?.Render(this);
         }
         finally

@@ -118,6 +118,16 @@ public class ExampleGameLogic : GameLogic
             vsyncButton.Text = State.Window.VSync ? "VSYNC: ON" : "VSYNC: OFF";
         };
 
+        var physicsDebugEnabled = false;
+        var physicsDebugButton = controls.AddButton("PHYSICS DEBUG: OFF");
+        Reality.Scenes.SceneLoaded += scene => scene.Collisions.DebugDraw.Enabled = physicsDebugEnabled;
+        physicsDebugButton.Clicked += (_, _) =>
+        {
+            physicsDebugEnabled = !physicsDebugEnabled;
+            Reality.Scene.Collisions.DebugDraw.Enabled = physicsDebugEnabled;
+            physicsDebugButton.Text = physicsDebugEnabled ? "PHYSICS DEBUG: ON" : "PHYSICS DEBUG: OFF";
+        };
+
         var quitButton = controls.AddButton("QUIT");
         quitButton.Clicked += (_, _) => State.Window.RequestClose();
     }

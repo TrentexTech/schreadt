@@ -1,3 +1,4 @@
+using Schreadt_Engine.Core;
 using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Collision;
@@ -11,6 +12,8 @@ public sealed class CollisionWorld2D
     private readonly Dictionary<ShapePair, INarrowPhaseRegistration> _narrowPhases = [];
     private Dictionary<ColliderPair, CollisionManifold> _activePairs = [];
     private Vector2D<double> _gravity = new(0.0, -9.81);
+    private int _lastPairCheckCount;
+    private int _lastNarrowPhaseTestCount;
 
     public CollisionWorld2D()
     {
@@ -22,6 +25,16 @@ public sealed class CollisionWorld2D
     public IReadOnlyList<Collider2D> Colliders => _colliders;
 
     public IReadOnlyCollection<RigidBody2D> Bodies => _bodies;
+
+    public CollisionDebugDraw2D DebugDraw { get; } = new();
+
+    public CollisionStatistics2D Statistics => new(
+        _colliders.Count,
+        _colliders.Count(CanCollide),
+        _bodies.Count,
+        _lastPairCheckCount,
+        _lastNarrowPhaseTestCount,
+        _activePairs.Count);
 
     public Vector2D<double> Gravity
     {
@@ -69,6 +82,179 @@ public sealed class CollisionWorld2D
         var pair = new ShapePair(typeof(TFirst), typeof(TSecond));
         var reversePair = new ShapePair(typeof(TSecond), typeof(TFirst));
         return _narrowPhases.Remove(pair) || _narrowPhases.Remove(reversePair);
+    }
+
+    public IReadOnlyList<Collider2D> OverlapPoint(
+        Vector2D<double> point,
+        CollisionQueryFilter2D? filter = null)
+    {
+        var results = new List<Collider2D>();
+        OverlapPoint(point, results, filter);
+        return results.AsReadOnly();
+    }
+
+    public int OverlapPoint(
+        Vector2D<double> point,
+        ICollection<Collider2D> results,
+        CollisionQueryFilter2D? filter = null)
+    {
+        ValidatePoint(point, nameof(point));
+        ArgumentNullException.ThrowIfNull(results);
+        results.Clear();
+        var queryFilter = filter ?? CollisionQueryFilter2D.All;
+
+        foreach (var collider in _colliders)
+        {
+            if (!CanQuery(collider, queryFilter) || !ContainsPoint(collider, point)) continue;
+            results.Add(collider);
+        }
+
+        return results.Count;
+    }
+
+    public IReadOnlyList<Collider2D> OverlapCircle(
+        Vector2D<double> center,
+        double radius,
+        CollisionQueryFilter2D? filter = null)
+    {
+        var results = new List<Collider2D>();
+        OverlapCircle(center, radius, results, filter);
+        return results.AsReadOnly();
+    }
+
+    public int OverlapCircle(
+        Vector2D<double> center,
+        double radius,
+        ICollection<Collider2D> results,
+        CollisionQueryFilter2D? filter = null)
+    {
+        ValidatePoint(center, nameof(center));
+        if (!double.IsFinite(radius) || radius < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(radius), "Query radius must be finite and non-negative.");
+        ArgumentNullException.ThrowIfNull(results);
+        results.Clear();
+        var queryFilter = filter ?? CollisionQueryFilter2D.All;
+
+        foreach (var collider in _colliders)
+        {
+            if (!CanQuery(collider, queryFilter) || !OverlapsCircle(collider, center, radius)) continue;
+            results.Add(collider);
+        }
+
+        return results.Count;
+    }
+
+    public IReadOnlyList<Collider2D> OverlapBox(
+        Vector2D<double> center,
+        Vector2D<double> size,
+        CollisionQueryFilter2D? filter = null)
+    {
+        var results = new List<Collider2D>();
+        OverlapBox(center, size, results, filter);
+        return results.AsReadOnly();
+    }
+
+    public int OverlapBox(
+        Vector2D<double> center,
+        Vector2D<double> size,
+        ICollection<Collider2D> results,
+        CollisionQueryFilter2D? filter = null)
+    {
+        ValidatePoint(center, nameof(center));
+        if (!double.IsFinite(size.X) || !double.IsFinite(size.Y) || size.X <= 0.0 || size.Y <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Query size must be finite and positive.");
+        ArgumentNullException.ThrowIfNull(results);
+        results.Clear();
+        var queryFilter = filter ?? CollisionQueryFilter2D.All;
+        var halfSize = size * 0.5;
+        var minimum = center - halfSize;
+        var maximum = center + halfSize;
+
+        foreach (var collider in _colliders)
+        {
+            if (!CanQuery(collider, queryFilter) || !OverlapsBox(collider, minimum, maximum)) continue;
+            results.Add(collider);
+        }
+
+        return results.Count;
+    }
+
+    public bool Raycast(
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        out RaycastHit2D hit,
+        CollisionQueryFilter2D? filter = null)
+    {
+        ValidateRay(origin, direction, maximumDistance, out var normalizedDirection);
+        var queryFilter = filter ?? CollisionQueryFilter2D.All;
+        var found = false;
+        var nearestDistance = maximumDistance;
+        hit = default;
+
+        foreach (var collider in _colliders)
+        {
+            if (!CanQuery(collider, queryFilter) ||
+                !TryRaycast(collider, origin, normalizedDirection, maximumDistance, out var distance, out var normal) ||
+                (found && distance >= nearestDistance))
+            {
+                continue;
+            }
+
+            found = true;
+            nearestDistance = distance;
+            hit = new RaycastHit2D(
+                collider,
+                origin + (normalizedDirection * distance),
+                normal,
+                distance,
+                maximumDistance);
+        }
+
+        return found;
+    }
+
+    public IReadOnlyList<RaycastHit2D> RaycastAll(
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        CollisionQueryFilter2D? filter = null)
+    {
+        var results = new List<RaycastHit2D>();
+        RaycastAll(origin, direction, maximumDistance, results, filter);
+        return results.AsReadOnly();
+    }
+
+    public int RaycastAll(
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        List<RaycastHit2D> results,
+        CollisionQueryFilter2D? filter = null)
+    {
+        ValidateRay(origin, direction, maximumDistance, out var normalizedDirection);
+        ArgumentNullException.ThrowIfNull(results);
+        results.Clear();
+        var queryFilter = filter ?? CollisionQueryFilter2D.All;
+
+        foreach (var collider in _colliders)
+        {
+            if (!CanQuery(collider, queryFilter) ||
+                !TryRaycast(collider, origin, normalizedDirection, maximumDistance, out var distance, out var normal))
+            {
+                continue;
+            }
+
+            results.Add(new RaycastHit2D(
+                collider,
+                origin + (normalizedDirection * distance),
+                normal,
+                distance,
+                maximumDistance));
+        }
+
+        results.Sort(static (first, second) => first.Distance.CompareTo(second.Distance));
+        return results.Count;
     }
 
     internal void AddCollider(Collider2D collider)
@@ -124,6 +310,8 @@ public sealed class CollisionWorld2D
             if (ReferenceEquals(body.World, this)) body.Integrate(Gravity, dt);
         }
 
+        _lastPairCheckCount = 0;
+        _lastNarrowPhaseTestCount = 0;
         var currentPairs = new Dictionary<ColliderPair, CollisionManifold>();
         var colliders = _colliders.ToArray();
 
@@ -135,9 +323,11 @@ public sealed class CollisionWorld2D
             for (var secondIndex = firstIndex + 1; secondIndex < colliders.Length; secondIndex++)
             {
                 var second = colliders[secondIndex];
+                _lastPairCheckCount++;
                 if (!CanCollide(second) || ReferenceEquals(first.Body, second.Body) || !first.CanCollideWith(second))
                     continue;
 
+                _lastNarrowPhaseTestCount++;
                 if (!TryCreateManifold(first, second, out var manifold)) continue;
 
                 Resolve(manifold);
@@ -187,12 +377,231 @@ public sealed class CollisionWorld2D
 
         _colliders.Clear();
         _bodies.Clear();
+        _lastPairCheckCount = 0;
+        _lastNarrowPhaseTestCount = 0;
+    }
+
+    internal void DrawDiagnostics(IRenderContext2D renderer)
+    {
+        ArgumentNullException.ThrowIfNull(renderer);
+        DebugDraw.Draw(renderer, _colliders);
     }
 
     private bool CanCollide(Collider2D collider)
     {
         return ReferenceEquals(collider.World, this) && collider.Enabled && collider.Owner.Active;
     }
+
+    private bool CanQuery(Collider2D collider, CollisionQueryFilter2D filter)
+    {
+        return CanCollide(collider) && filter.Allows(collider);
+    }
+
+    private static bool ContainsPoint(Collider2D collider, Vector2D<double> point)
+    {
+        return collider switch
+        {
+            CircleCollider2D circle => LengthSquared(point - circle.Center) <= circle.Radius * circle.Radius,
+            AxisAlignedBoxCollider2D box => point.X >= box.Minimum.X && point.X <= box.Maximum.X &&
+                                                  point.Y >= box.Minimum.Y && point.Y <= box.Maximum.Y,
+            _ => false
+        };
+    }
+
+    private static bool OverlapsCircle(Collider2D collider, Vector2D<double> center, double radius)
+    {
+        switch (collider)
+        {
+            case CircleCollider2D circle:
+                var combinedRadius = radius + circle.Radius;
+                return LengthSquared(center - circle.Center) <= combinedRadius * combinedRadius;
+
+            case AxisAlignedBoxCollider2D box:
+                var closest = new Vector2D<double>(
+                    Math.Clamp(center.X, box.Minimum.X, box.Maximum.X),
+                    Math.Clamp(center.Y, box.Minimum.Y, box.Maximum.Y));
+                return LengthSquared(center - closest) <= radius * radius;
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool OverlapsBox(
+        Collider2D collider,
+        Vector2D<double> minimum,
+        Vector2D<double> maximum)
+    {
+        switch (collider)
+        {
+            case CircleCollider2D circle:
+                var closest = new Vector2D<double>(
+                    Math.Clamp(circle.Center.X, minimum.X, maximum.X),
+                    Math.Clamp(circle.Center.Y, minimum.Y, maximum.Y));
+                return LengthSquared(circle.Center - closest) <= circle.Radius * circle.Radius;
+
+            case AxisAlignedBoxCollider2D box:
+                return minimum.X <= box.Maximum.X && maximum.X >= box.Minimum.X &&
+                       minimum.Y <= box.Maximum.Y && maximum.Y >= box.Minimum.Y;
+
+            default:
+                return false;
+        }
+    }
+
+    private static bool TryRaycast(
+        Collider2D collider,
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        out double distance,
+        out Vector2D<double> normal)
+    {
+        return collider switch
+        {
+            CircleCollider2D circle => TryRaycastCircle(
+                circle, origin, direction, maximumDistance, out distance, out normal),
+            AxisAlignedBoxCollider2D box => TryRaycastBox(
+                box, origin, direction, maximumDistance, out distance, out normal),
+            _ => NoRaycastHit(out distance, out normal)
+        };
+    }
+
+    private static bool TryRaycastCircle(
+        CircleCollider2D circle,
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        out double distance,
+        out Vector2D<double> normal)
+    {
+        var offset = origin - circle.Center;
+        var radiusSquared = circle.Radius * circle.Radius;
+        if (LengthSquared(offset) <= radiusSquared)
+        {
+            distance = 0.0;
+            normal = -direction;
+            return true;
+        }
+
+        var projection = Dot(offset, direction);
+        var discriminant = projection * projection - (LengthSquared(offset) - radiusSquared);
+        if (discriminant < 0.0) return NoRaycastHit(out distance, out normal);
+
+        distance = -projection - Math.Sqrt(discriminant);
+        if (distance < 0.0 || distance > maximumDistance)
+            return NoRaycastHit(out distance, out normal);
+
+        normal = (origin + (direction * distance) - circle.Center) / circle.Radius;
+        return true;
+    }
+
+    private static bool TryRaycastBox(
+        AxisAlignedBoxCollider2D box,
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        out double distance,
+        out Vector2D<double> normal)
+    {
+        if (ContainsPoint(box, origin))
+        {
+            distance = 0.0;
+            normal = -direction;
+            return true;
+        }
+
+        var near = 0.0;
+        var far = maximumDistance;
+        normal = Vector2D<double>.Zero;
+        if (!ClipRayAxis(
+                origin.X, direction.X, box.Minimum.X, box.Maximum.X,
+                new Vector2D<double>(-1.0, 0.0), new Vector2D<double>(1.0, 0.0),
+                ref near, ref far, ref normal) ||
+            !ClipRayAxis(
+                origin.Y, direction.Y, box.Minimum.Y, box.Maximum.Y,
+                new Vector2D<double>(0.0, -1.0), new Vector2D<double>(0.0, 1.0),
+                ref near, ref far, ref normal) ||
+            near > maximumDistance)
+        {
+            return NoRaycastHit(out distance, out normal);
+        }
+
+        distance = near;
+        return true;
+    }
+
+    private static bool ClipRayAxis(
+        double origin,
+        double direction,
+        double minimum,
+        double maximum,
+        Vector2D<double> minimumNormal,
+        Vector2D<double> maximumNormal,
+        ref double near,
+        ref double far,
+        ref Vector2D<double> hitNormal)
+    {
+        if (Math.Abs(direction) <= double.Epsilon)
+            return origin >= minimum && origin <= maximum;
+
+        double axisNear;
+        double axisFar;
+        Vector2D<double> axisNormal;
+        if (direction > 0.0)
+        {
+            axisNear = (minimum - origin) / direction;
+            axisFar = (maximum - origin) / direction;
+            axisNormal = minimumNormal;
+        }
+        else
+        {
+            axisNear = (maximum - origin) / direction;
+            axisFar = (minimum - origin) / direction;
+            axisNormal = maximumNormal;
+        }
+
+        if (axisNear > near)
+        {
+            near = axisNear;
+            hitNormal = axisNormal;
+        }
+
+        far = Math.Min(far, axisFar);
+        return near <= far;
+    }
+
+    private static bool NoRaycastHit(out double distance, out Vector2D<double> normal)
+    {
+        distance = 0.0;
+        normal = Vector2D<double>.Zero;
+        return false;
+    }
+
+    private static void ValidatePoint(Vector2D<double> point, string parameterName)
+    {
+        if (!double.IsFinite(point.X) || !double.IsFinite(point.Y))
+            throw new ArgumentOutOfRangeException(parameterName, "Query coordinates must be finite.");
+    }
+
+    private static void ValidateRay(
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        out Vector2D<double> normalizedDirection)
+    {
+        ValidatePoint(origin, nameof(origin));
+        ValidatePoint(direction, nameof(direction));
+        if (!double.IsFinite(maximumDistance) || maximumDistance < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maximumDistance), "Ray length must be finite and non-negative.");
+
+        var lengthSquared = LengthSquared(direction);
+        if (lengthSquared <= double.Epsilon)
+            throw new ArgumentOutOfRangeException(nameof(direction), "Ray direction must have a non-zero length.");
+        normalizedDirection = direction / Math.Sqrt(lengthSquared);
+    }
+
+    private static double LengthSquared(Vector2D<double> value) => Dot(value, value);
 
     private bool TryCreateManifold(
         Collider2D first,
