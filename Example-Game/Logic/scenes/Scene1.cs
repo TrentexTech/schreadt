@@ -52,6 +52,28 @@ public class Scene1 : SceneLogic
             RotationRadians = 0.12,
             Tint = new Vector4D<float>(0.8f, 0.95f, 1.0f, 0.9f)
         };
+        var tiltedPanel = new Rectangle2D
+        {
+            Position = new Vector2D<double>(1.35, -0.65),
+            Size = new Vector2D<double>(0.58, 0.22),
+            RotationRadians = -0.2,
+            Color = new Vector4D<float>(0.25f, 0.8f, 0.95f, 0.85f)
+        };
+        var hexagon = new Polygon(
+        [
+            new Vector2D<double>(0.5, 0.0),
+            new Vector2D<double>(0.25, 0.433),
+            new Vector2D<double>(-0.25, 0.433),
+            new Vector2D<double>(-0.5, 0.0),
+            new Vector2D<double>(-0.25, -0.433),
+            new Vector2D<double>(0.25, -0.433)
+        ])
+        {
+            Position = new Vector2D<double>(1.35, -0.28),
+            Scale = new Vector2D<double>(0.32, 0.32),
+            RotationRadians = 0.16,
+            Color = new Vector4D<float>(0.65f, 0.35f, 1.0f, 0.9f)
+        };
         player.AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Kinematic
@@ -71,6 +93,8 @@ public class Scene1 : SceneLogic
         fallingBody.AddImpulse(new Vector2D<double>(0.0, _physicsTuning.InitialImpulse));
 
         Scene.AddChild(energyBeacon);
+        Scene.AddChild(tiltedPanel);
+        Scene.AddChild(hexagon);
         Scene.AddChild(player);
         Scene.AddChild(landmark);
         Scene.AddChild(fallingCircle);

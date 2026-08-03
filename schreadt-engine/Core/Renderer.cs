@@ -10,6 +10,13 @@ public sealed class Renderer : IDisposable
 {
     private const int CircleSegmentCount = 96;
     private const int MaximumGridLineCount = 2048;
+    private static readonly Vector2D<double>[] RectangleVertices =
+    [
+        new(-0.5, 0.5),
+        new(-0.5, -0.5),
+        new(0.5, -0.5),
+        new(0.5, 0.5)
+    ];
 
     private const string VertexShaderSource = """
         #version 330 core
@@ -178,6 +185,58 @@ public sealed class Renderer : IDisposable
         _gl.BindVertexArray(_circleVertexArray);
         _gl.DrawArrays(PrimitiveType.TriangleFan, 0, (uint)_circleVertexCount);
         _gl.BindVertexArray(0);
+    }
+
+    public void DrawRectangle(
+        Vector2D<double> center,
+        Vector2D<double> size,
+        Vector4D<float> color,
+        double rotationRadians = 0.0)
+    {
+        DrawPolygon(center, RectangleVertices, size, rotationRadians, color);
+    }
+
+    public void DrawPolygon(
+        Vector2D<double> center,
+        IReadOnlyList<Vector2D<double>> localVertices,
+        Vector2D<double> scale,
+        double rotationRadians,
+        Vector4D<float> color)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_renderingFrame) throw new InvalidOperationException("Draw calls must occur while a camera is rendering a frame.");
+        if (!double.IsFinite(center.X) || !double.IsFinite(center.Y))
+            throw new ArgumentOutOfRangeException(nameof(center), "Shape position must be finite.");
+        if (!double.IsFinite(scale.X) || !double.IsFinite(scale.Y) || scale.X <= 0.0 || scale.Y <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(scale), "Shape scale must be finite and positive.");
+        if (!double.IsFinite(rotationRadians))
+            throw new ArgumentOutOfRangeException(nameof(rotationRadians), "Shape rotation must be finite.");
+
+        ConvexPolygon2D.Validate(localVertices, nameof(localVertices));
+
+        var cosine = Math.Cos(rotationRadians);
+        var sine = Math.Sin(rotationRadians);
+        var projected = new Vector2D<double>[localVertices.Count];
+        for (var index = 0; index < localVertices.Count; index++)
+        {
+            var local = localVertices[index];
+            var scaledX = local.X * scale.X;
+            var scaledY = local.Y * scale.Y;
+            var world = center + new Vector2D<double>(
+                scaledX * cosine - scaledY * sine,
+                scaledX * sine + scaledY * cosine);
+            projected[index] = _cameraView.WorldToNormalizedDevicePoint(world);
+        }
+
+        var vertices = new List<float>((projected.Length - 2) * 6);
+        for (var index = 1; index < projected.Length - 1; index++)
+        {
+            AddVertex(vertices, projected[0]);
+            AddVertex(vertices, projected[index]);
+            AddVertex(vertices, projected[index + 1]);
+        }
+
+        DrawDynamicBatch(vertices, color, PrimitiveType.Triangles);
     }
 
     public void DrawSprite(
@@ -518,6 +577,12 @@ public sealed class Renderer : IDisposable
         vertices.Add((float)projectedStart.Y);
         vertices.Add((float)projectedEnd.X);
         vertices.Add((float)projectedEnd.Y);
+    }
+
+    private static void AddVertex(List<float> vertices, Vector2D<double> vertex)
+    {
+        vertices.Add((float)vertex.X);
+        vertices.Add((float)vertex.Y);
     }
 
     private void DrawLineBatch(List<float> vertices, Vector4D<float> color)
