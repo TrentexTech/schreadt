@@ -9,6 +9,11 @@ internal sealed class FixedStepClock
     private const double StepComparisonTolerance = 1e-12;
     private double _accumulator;
 
+    internal void Reset()
+    {
+        _accumulator = 0.0;
+    }
+
     internal FrameTiming Advance(double frameDeltaTime)
     {
         if (!double.IsFinite(frameDeltaTime) || frameDeltaTime < 0)

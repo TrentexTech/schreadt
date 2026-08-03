@@ -9,6 +9,8 @@ public static class State
     private static IInputService? _input;
     private static GuiSystem? _gui;
     private static AssetCatalog? _assets;
+    private static IWindowController? _window;
+    private static RuntimeController? _runtime;
 
     public static string[] LaunchArgs { get; internal set; } = [];
 
@@ -23,6 +25,12 @@ public static class State
 
     public static AssetCatalog Assets => _assets
                                          ?? throw new InvalidOperationException("The engine has not loaded its assets yet.");
+
+    public static IWindowController Window => _window
+                                               ?? throw new InvalidOperationException("The engine has not initialized its window yet.");
+
+    public static RuntimeController Runtime => _runtime
+                                                ?? throw new InvalidOperationException("The engine has not initialized its runtime yet.");
 
     internal static void SetCurrentReality(Reality reality)
     {
@@ -42,5 +50,15 @@ public static class State
     internal static void SetAssets(AssetCatalog? assets)
     {
         _assets = assets;
+    }
+
+    internal static void SetWindow(IWindowController window)
+    {
+        _window = window;
+    }
+
+    internal static void SetRuntime(RuntimeController runtime)
+    {
+        _runtime = runtime;
     }
 }

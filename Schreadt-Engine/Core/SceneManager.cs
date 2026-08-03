@@ -96,6 +96,7 @@ public sealed class SceneManager
     internal void Shutdown()
     {
         _pendingSceneName = null;
+        _initialized = false;
 
         if (CurrentScene is null) return;
 

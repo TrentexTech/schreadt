@@ -5,13 +5,14 @@ namespace Schreadt_Engine.Core;
 
 internal class Application
 {
-    private readonly FixedStepClock _physicsClock = new();
     private readonly PerformanceOverlay _performanceOverlay;
+    private bool _shutdown;
 
     internal readonly Window Window;
     internal readonly InputManager Input;
     internal readonly Reality Reality;
     internal readonly GuiSystem Gui;
+    internal readonly RuntimeController Runtime;
 
     internal Application(GameLogic? gameLogic)
     {
@@ -22,7 +23,10 @@ internal class Application
         _performanceOverlay = new PerformanceOverlay(Gui);
         Reality = new Reality(gameLogic);
         State.SetCurrentReality(Reality);
+        Runtime = new RuntimeController();
+        State.SetRuntime(Runtime);
         Window = new Window(this);
+        State.SetWindow(Window);
     }
 
     internal void Init()
@@ -39,9 +43,12 @@ internal class Application
     {
         try
         {
-            var timing = _physicsClock.Advance(dt);
-
             Gui.Update(Input);
+            if (_shutdown || Window.IsCloseRequested) return;
+
+            var timing = Runtime.Advance(dt);
+            if (!timing.ShouldUpdateSimulation) return;
+
             Reality.UpdateGameplay(timing.FrameDeltaTime);
 
             for (var step = 0; step < timing.FixedStepCount; step++)
@@ -59,12 +66,17 @@ internal class Application
 
     internal void Render(IRenderer2D renderer, double frameTime)
     {
+        if (_shutdown || Window.IsCloseRequested) return;
+
         _performanceOverlay.Update(frameTime);
         Reality.Render(renderer, Gui);
     }
 
     internal void Shutdown()
     {
+        if (_shutdown) return;
+
+        _shutdown = true;
         Reality.Shutdown();
     }
 }
