@@ -109,6 +109,11 @@ public sealed class CollisionWorld2D
         }
 
         _activePairs = currentPairs;
+
+        foreach (var body in _bodies.ToArray())
+        {
+            if (ReferenceEquals(body.World, this)) body.EndPhysicsStep(dt);
+        }
     }
 
     internal void Clear()
@@ -177,9 +182,9 @@ public sealed class CollisionWorld2D
         var correction = manifold.Normal * manifold.Penetration;
 
         if (firstCorrectionShare > 0)
-            firstBody.Owner.Move(-correction * firstCorrectionShare);
+            firstBody.ApplyPositionCorrection(-correction * firstCorrectionShare);
         if (secondCorrectionShare > 0)
-            secondBody.Owner.Move(correction * secondCorrectionShare);
+            secondBody.ApplyPositionCorrection(correction * secondCorrectionShare);
 
         var firstInverseMass = firstBody.InverseMass;
         var secondInverseMass = secondBody.InverseMass;
@@ -193,12 +198,32 @@ public sealed class CollisionWorld2D
 
         if (velocityAlongNormal >= 0) return;
 
-        var restitution = Math.Min(firstBody.Restitution, secondBody.Restitution);
-        var impulseMagnitude = -(1.0 + restitution) * velocityAlongNormal / totalInverseMass;
-        var impulse = manifold.Normal * impulseMagnitude;
+        var restitution = Math.Max(firstBody.Restitution, secondBody.Restitution);
+        var normalImpulseMagnitude = -(1.0 + restitution) * velocityAlongNormal / totalInverseMass;
+        var normalImpulse = manifold.Normal * normalImpulseMagnitude;
 
-        if (firstInverseMass > 0) firstBody.Velocity -= impulse * firstInverseMass;
-        if (secondInverseMass > 0) secondBody.Velocity += impulse * secondInverseMass;
+        firstBody.ApplyCollisionImpulse(-normalImpulse);
+        secondBody.ApplyCollisionImpulse(normalImpulse);
+
+        relativeVelocity = secondBody.Velocity - firstBody.Velocity;
+        var remainingNormalVelocity = Dot(relativeVelocity, manifold.Normal);
+        var tangentVelocity = relativeVelocity - manifold.Normal * remainingNormalVelocity;
+        var tangentLengthSquared = Dot(tangentVelocity, tangentVelocity);
+
+        if (tangentLengthSquared <= double.Epsilon) return;
+
+        var tangent = tangentVelocity / Math.Sqrt(tangentLengthSquared);
+        var tangentImpulseMagnitude = -Dot(relativeVelocity, tangent) / totalInverseMass;
+        var combinedFriction = Math.Sqrt(firstBody.Friction * secondBody.Friction);
+        var maximumFrictionImpulse = normalImpulseMagnitude * combinedFriction;
+        tangentImpulseMagnitude = Math.Clamp(
+            tangentImpulseMagnitude,
+            -maximumFrictionImpulse,
+            maximumFrictionImpulse);
+        var frictionImpulse = tangent * tangentImpulseMagnitude;
+
+        firstBody.ApplyCollisionImpulse(-frictionImpulse);
+        secondBody.ApplyCollisionImpulse(frictionImpulse);
     }
 
     private static (double First, double Second) GetCorrectionShares(
@@ -225,6 +250,11 @@ public sealed class CollisionWorld2D
         return totalInverseMass > 0
             ? (firstInverseMass / totalInverseMass, secondInverseMass / totalInverseMass)
             : (0.0, 0.0);
+    }
+
+    private static double Dot(Vector2D<double> first, Vector2D<double> second)
+    {
+        return first.X * second.X + first.Y * second.Y;
     }
 
     private static void NotifyEntered(CollisionManifold manifold)

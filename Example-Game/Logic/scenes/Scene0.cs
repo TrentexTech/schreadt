@@ -40,11 +40,17 @@ public class Scene0 : SceneLogic
         });
         player.AddComponent(new CircleCollider2D(player.Radius));
         landmark.AddComponent(new CircleCollider2D(landmark.Radius));
-        fallingCircle.AddComponent(new RigidBody2D
+        var fallingBody = fallingCircle.AddComponent(new RigidBody2D
         {
-            BodyType = CollisionBodyType2D.Dynamic
+            BodyType = CollisionBodyType2D.Dynamic,
+            Mass = 0.75,
+            Restitution = 0.35,
+            Friction = 0.7,
+            LinearDamping = 0.15,
+            MaximumSpeed = 3.0
         });
         fallingCircle.AddComponent(new CircleCollider2D(fallingCircle.Radius));
+        fallingBody.AddImpulse(new Vector2D<double>(0.0, 0.12));
 
         Scene.AddChild(player);
         Scene.AddChild(landmark);
