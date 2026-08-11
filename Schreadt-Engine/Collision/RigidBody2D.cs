@@ -36,6 +36,7 @@ public sealed class RigidBody2D : GameComponent
         get => _bodyType;
         set
         {
+            if (!Enum.IsDefined(value)) throw new ArgumentOutOfRangeException(nameof(value));
             if (_bodyType == value) return;
 
             _bodyType = value;
