@@ -23,10 +23,17 @@ public sealed class GuiLayer
     public T Add<T>(T element) where T : IGuiElement
     {
         ArgumentNullException.ThrowIfNull(element);
-        if (_elements.Contains(element)) throw new InvalidOperationException("The GUI element is already registered.");
-        if (Screens.Screens.Any(screen => ReferenceEquals(screen.Root, element)))
-            throw new InvalidOperationException("The GUI element is already used as a screen root.");
-        _elements.Add(element);
+        GuiElementOwnership.Claim(element, this, "GUI layer");
+        try
+        {
+            _elements.Add(element);
+        }
+        catch
+        {
+            GuiElementOwnership.Release(element, this);
+            throw;
+        }
+
         return element;
     }
 
@@ -41,13 +48,19 @@ public sealed class GuiLayer
         ArgumentNullException.ThrowIfNull(element);
         if (!_elements.Remove(element)) return false;
         _system?.ReleaseInteraction(element);
+        GuiElementOwnership.Release(element, this);
         return true;
     }
 
     public void Clear()
     {
         Screens.Clear();
-        foreach (var element in _elements.ToArray()) _system?.ReleaseInteraction(element);
+        foreach (var element in _elements)
+        {
+            _system?.ReleaseInteraction(element);
+            GuiElementOwnership.Release(element, this);
+        }
+
         _elements.Clear();
     }
 

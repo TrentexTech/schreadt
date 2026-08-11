@@ -43,8 +43,17 @@ public sealed class GuiSystem
     public T Add<T>(T element) where T : IGuiElement
     {
         ArgumentNullException.ThrowIfNull(element);
-        if (_elements.Contains(element)) throw new InvalidOperationException("The GUI element is already registered.");
-        _elements.Add(element);
+        GuiElementOwnership.Claim(element, this, "persistent GUI collection");
+        try
+        {
+            _elements.Add(element);
+        }
+        catch
+        {
+            GuiElementOwnership.Release(element, this);
+            throw;
+        }
+
         return element;
     }
 
@@ -79,6 +88,7 @@ public sealed class GuiSystem
         ArgumentNullException.ThrowIfNull(element);
         if (!_elements.Remove(element)) return false;
         ReleaseInteraction(element);
+        GuiElementOwnership.Release(element, this);
         return true;
     }
 

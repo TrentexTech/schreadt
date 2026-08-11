@@ -66,15 +66,20 @@ public sealed class GuiScreenStack
         ArgumentNullException.ThrowIfNull(screen);
         if (screen.IsOpen || _screens.Contains(screen))
             throw new InvalidOperationException("The GUI screen is already open.");
-        if (_layer.Elements.Any(element => ReferenceEquals(element, screen.Root)) ||
-            _screens.Any(candidate => ReferenceEquals(candidate.Root, screen.Root)))
-        {
-            throw new InvalidOperationException("The screen root is already registered on this GUI layer.");
-        }
         if (_screens.Any(candidate => string.Equals(candidate.Name, screen.Name, StringComparison.Ordinal)))
             throw new InvalidOperationException($"A GUI screen named '{screen.Name}' is already open.");
 
-        _screens.Add(screen);
+        GuiElementOwnership.Claim(screen.Root, screen, $"GUI screen '{screen.Name}'");
+        try
+        {
+            _screens.Add(screen);
+        }
+        catch
+        {
+            GuiElementOwnership.Release(screen.Root, screen);
+            throw;
+        }
+
         screen.NotifyOpened();
         ScreenPushed?.Invoke(screen);
         UpdateSimulationPause();
@@ -120,6 +125,7 @@ public sealed class GuiScreenStack
             var screen = _screens[index];
             _layer.ReleaseInteraction(screen.Root);
             _screens.RemoveAt(index);
+            GuiElementOwnership.Release(screen.Root, screen);
             screen.NotifyClosed();
             ScreenRemoved?.Invoke(screen);
         }
@@ -139,6 +145,7 @@ public sealed class GuiScreenStack
     {
         _layer.ReleaseInteraction(screen.Root);
         _screens.RemoveAt(index);
+        GuiElementOwnership.Release(screen.Root, screen);
         screen.NotifyClosed();
         ScreenRemoved?.Invoke(screen);
         UpdateSimulationPause();

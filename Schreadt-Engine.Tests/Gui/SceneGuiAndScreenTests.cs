@@ -16,10 +16,11 @@ public sealed class SceneGuiAndScreenTests
         var scenes = new SceneManager(gui, runtime);
         GuiLayer? firstLayer = null;
         GuiScreen? firstScreen = null;
+        GuiButton? firstButton = null;
         scenes.RegisterScene("first", () => new CallbackSceneLogic(scene =>
         {
             firstLayer = scene.Gui;
-            scene.Gui.AddButton("FIRST");
+            firstButton = scene.Gui.AddButton("FIRST");
             firstScreen = scene.Screens.Push(new GuiScreen("overlay", new GuiPanel()));
         }));
         scenes.RegisterScene("second", () => new CallbackSceneLogic(scene => scene.Gui.AddButton("SECOND")));
@@ -40,6 +41,7 @@ public sealed class SceneGuiAndScreenTests
         Assert.False(firstScreen.IsOpen);
         Assert.Single(gui.Layers);
         Assert.Same(scenes.CurrentScene!.Gui, gui.Layers[0]);
+        Assert.Same(firstButton, gui.Add(firstButton!));
     }
 
     [Fact]

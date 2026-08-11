@@ -39,11 +39,20 @@ public sealed class GuiPanel : GuiElement
     {
         ArgumentNullException.ThrowIfNull(element);
         if (ReferenceEquals(element, this)) throw new InvalidOperationException("A panel cannot contain itself.");
-        if (_children.Contains(element)) throw new InvalidOperationException("The GUI element is already in this panel.");
         if (element is GuiPanel panel && panel.ContainsDescendant(this))
             throw new InvalidOperationException("Adding the panel would create a GUI hierarchy cycle.");
 
-        _children.Add(element);
+        GuiElementOwnership.Claim(element, this, "GUI panel");
+        try
+        {
+            _children.Add(element);
+        }
+        catch
+        {
+            GuiElementOwnership.Release(element, this);
+            throw;
+        }
+
         return element;
     }
 
@@ -54,7 +63,15 @@ public sealed class GuiPanel : GuiElement
     public bool Remove(IGuiElement element)
     {
         ArgumentNullException.ThrowIfNull(element);
-        return _children.Remove(element);
+        if (!_children.Remove(element)) return false;
+        GuiElementOwnership.Release(element, this);
+        return true;
+    }
+
+    public void Clear()
+    {
+        foreach (var child in _children) GuiElementOwnership.Release(child, this);
+        _children.Clear();
     }
 
     protected override Vector2D<float> OnMeasure(Vector2D<float> availableSize)
