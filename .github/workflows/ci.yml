@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,10 +23,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
@@ -41,3 +42,29 @@ jobs:
       - name: Publish examples
         shell: pwsh
         run: ./scripts/Publish-AllExamples.ps1 -Runtime ${{ matrix.runtime }} -Configuration Release
+
+      - name: Package published examples
+        id: package
+        shell: pwsh
+        run: |
+          $packageDirectory = Join-Path $PWD 'artifacts/packages'
+          New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
+
+          $extension = if ('${{ matrix.runtime }}'.StartsWith('win-')) { 'zip' } else { 'tar.gz' }
+          $packagePath = Join-Path $packageDirectory "Schreadt-examples-${{ matrix.runtime }}.$extension"
+          & tar -acf $packagePath `
+            -C (Join-Path $PWD 'artifacts/publish') `
+            'Example-Game/${{ matrix.runtime }}' `
+            'Mandelbrot-Explorer/${{ matrix.runtime }}'
+          if ($LASTEXITCODE -ne 0) {
+            throw "tar failed with exit code $LASTEXITCODE."
+          }
+
+          "path=$packagePath" >> $env:GITHUB_OUTPUT
+
+      - name: Upload published examples
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
+          archive: false
