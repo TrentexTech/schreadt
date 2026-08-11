@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-publish:
+    name: ${{ matrix.os }} / ${{ matrix.runtime }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            runtime: win-x64
+          - os: ubuntu-latest
+            runtime: linux-x64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Schreadt.slnx
+
+      - name: Build
+        run: dotnet build Schreadt.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --solution Schreadt.slnx --configuration Release --no-build
+
+      - name: Publish examples
+        shell: pwsh
+        run: ./scripts/Publish-AllExamples.ps1 -Runtime ${{ matrix.runtime }} -Configuration Release
