@@ -1,3 +1,4 @@
+using System.Numerics;
 using Schreadt_Engine.Core;
 using Schreadt_Engine.Collision;
 using Schreadt_Engine.Gui;
@@ -30,6 +31,14 @@ public sealed class PerformanceOverlayTests
         var overlay = new PerformanceOverlay(gui);
         var runtime = new RuntimeController();
         var renderer = new RecordingRenderContext(1280, 720);
+        var display = PerformanceDisplayMetrics.Create(
+            new Vector2D<int>(1280, 720),
+            WindowDisplayState.Maximized,
+            vSync: false,
+            new Vector2D<int>(2560, 1440),
+            new Vector2D<int>(320, 180),
+            new Vector2D<int>(1920, 1080),
+            gui);
 
         overlay.Update(
             1.0 / 60.0,
@@ -37,26 +46,93 @@ public sealed class PerformanceOverlayTests
             fixedStepCount: 2,
             new CollisionStatistics2D(10, 8, 3, 28, 12, 2),
             new RenderStatistics(14, 92, 276, 1, 1280L * 720 * 4),
-            renderer.ViewportSize);
+            display);
         gui.Render(renderer);
 
-        var text = Assert.Single(renderer.Texts);
+        var text = string.Join('\n', renderer.TextDraws.Select(draw => draw.Text));
+        Assert.Contains("PERFORMANCE OVERLAY  [F3: HIDE]", text);
         Assert.Contains("FPS: 60.0", text);
-        Assert.Contains("FRAME: 16.67 MS", text);
+        Assert.Contains("TIME: 16.67 MS", text);
         Assert.Contains("DRAW: 14  PRIM: 92  VERT: 276", text);
         Assert.Contains("UPLOAD: 1  DATA: 3.52 MB", text);
         Assert.Contains("SIM: RUNNING  FIXED: 2  SCALE: 1.00", text);
         Assert.Contains("PHYS: 8/10  CONTACT: 2", text);
         Assert.Contains("CHECKS: 28 PAIR  12 NARROW", text);
-        Assert.Contains("VIEW: 1280X720", text);
+        Assert.Contains("WINDOW: 1280X720  MAXIMIZED  VSYNC: OFF", text);
+        Assert.Contains("FRAMEBUFFER: 2560X1440  SCALE: 2.00X/2.00X", text);
+        Assert.Contains("VIEWPORT: 1920X1080  OFFSET: 320,180", text);
+        Assert.Contains("LOGICAL: 1280.0X720.0  SCALE: 1.50X  REF: 720.0", text);
         Assert.Contains("MEM:", text);
         Assert.Contains("GC:", text);
+
+        var unsupportedCharacters = text
+            .Where(character => character is not '\r' and not '\n' && !BitmapFont5x7.Supports(character))
+            .Distinct()
+            .ToArray();
+        Assert.True(
+            unsupportedCharacters.Length == 0,
+            $"The performance overlay contains unsupported bitmap-font characters: {string.Join(' ', unsupportedCharacters)}");
+
+        string[] sections =
+        [
+            "[FRAME]",
+            "[RENDERING]",
+            "[SIMULATION]",
+            "[PHYSICS]",
+            "[DISPLAY]",
+            "[GUI]",
+            "[MEMORY]"
+        ];
+        var previousSectionIndex = -1;
+        foreach (var section in sections)
+        {
+            var sectionIndex = text.IndexOf(section, StringComparison.Ordinal);
+            Assert.True(sectionIndex > previousSectionIndex, $"Section {section} is missing or out of order.");
+            previousSectionIndex = sectionIndex;
+        }
+
+        var sectionColors = renderer.TextDraws
+            .Where(draw => sections.Contains(draw.Text, StringComparer.Ordinal))
+            .Select(draw => draw.Color)
+            .ToArray();
+        Assert.Equal(sections.Length, sectionColors.Length);
+        Assert.Equal(sections.Length, sectionColors.Distinct().Count());
+
+        Assert.All(renderer.TextDraws, draw => Assert.Equal(1.75f, draw.Scale));
+        var frameHeading = Assert.Single(renderer.TextDraws, draw => draw.Text == "[FRAME]");
+        var frameValues = Assert.Single(renderer.TextDraws, draw => draw.Text.StartsWith("FPS:", StringComparison.Ordinal));
+        var headingHeight = (BitmapFont5x7.LineAdvance - 1) * frameHeading.Scale;
+        var headingToValuesGap = frameValues.Position.Y - frameHeading.Position.Y - headingHeight;
+        Assert.Equal(frameHeading.Scale, headingToValuesGap, 3);
+    }
+
+    [Fact]
+    public void HandleInput_F3TogglesOverlayVisibility()
+    {
+        var gui = new GuiSystem();
+        var overlay = new PerformanceOverlay(gui);
+
+        Assert.True(overlay.IsVisible);
+
+        overlay.HandleInput(new TestInputState(InputKey.F3));
+        Assert.False(overlay.IsVisible);
+        var hiddenRenderer = new RecordingRenderContext(1280, 720);
+        gui.Render(hiddenRenderer);
+        Assert.Empty(hiddenRenderer.TextDraws);
+        Assert.Empty(hiddenRenderer.ScreenRectangles);
+
+        overlay.HandleInput(new TestInputState(InputKey.F3));
+        Assert.True(overlay.IsVisible);
+        var visibleRenderer = new RecordingRenderContext(1280, 720);
+        gui.Render(visibleRenderer);
+        Assert.NotEmpty(visibleRenderer.TextDraws);
+        Assert.Single(visibleRenderer.ScreenRectangles);
     }
 
     private sealed class RecordingRenderContext(int width, int height) : IRenderContext2D
     {
         internal List<(Vector2D<float> Position, Vector2D<float> Size)> ScreenRectangles { get; } = [];
-        internal List<string> Texts { get; } = [];
+        internal List<(string Text, Vector2D<float> Position, float Scale, Vector4D<float> Color)> TextDraws { get; } = [];
 
         public Vector2D<int> ViewportSize { get; } = new(width, height);
 
@@ -100,7 +176,7 @@ public sealed class PerformanceOverlayTests
             Vector4D<float> backgroundColor,
             float padding = 0.0f)
         {
-            Texts.Add(text);
+            TextDraws.Add((text, position, scale, color));
         }
 
         public void DrawScreenRectangle(
@@ -110,5 +186,34 @@ public sealed class PerformanceOverlayTests
         {
             ScreenRectangles.Add((position, size));
         }
+    }
+
+    private sealed class TestInputState(InputKey pressedKey) : IInputState
+    {
+        public bool Available => true;
+        public Vector2 MousePosition => default;
+        public Vector2 MouseDelta => default;
+        public Vector2 ScrollDelta => default;
+        public Vector2D<double> MouseViewportPosition => default;
+        public double ViewportAspectRatio => 16.0 / 9.0;
+        public string TextInput => string.Empty;
+
+        public event Action<InputKey>? KeyPressed { add { } remove { } }
+        public event Action<InputKey>? KeyReleased { add { } remove { } }
+        public event Action<char>? CharacterTyped { add { } remove { } }
+        public event Action<InputMouseButton>? MouseButtonPressed { add { } remove { } }
+        public event Action<InputMouseButton>? MouseButtonReleased { add { } remove { } }
+        public event Action<Vector2>? MouseMoved { add { } remove { } }
+        public event Action<Vector2>? Scrolled { add { } remove { } }
+
+        public bool IsKeyDown(InputKey key) => false;
+        public bool WasKeyPressed(InputKey key) => key == pressedKey;
+        public bool WasKeyReleased(InputKey key) => false;
+        public bool IsMouseButtonDown(InputMouseButton button) => false;
+        public bool WasMouseButtonPressed(InputMouseButton button) => false;
+        public bool WasMouseButtonReleased(InputMouseButton button) => false;
+        public bool IsActionDown(string action) => false;
+        public bool WasActionPressed(string action) => false;
+        public bool WasActionReleased(string action) => false;
     }
 }

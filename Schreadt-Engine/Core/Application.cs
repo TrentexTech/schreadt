@@ -53,6 +53,7 @@ internal class Application
     {
         try
         {
+            _performanceOverlay.HandleInput(Input);
             Gui.Update(Input);
             if (_shutdown || Window.IsCloseRequested) return;
 
@@ -81,13 +82,23 @@ internal class Application
     {
         if (_shutdown || Window.IsCloseRequested) return;
 
-        _performanceOverlay.Update(
-            frameTime,
-            Runtime,
-            _lastFixedStepCount,
-            Reality.Scene.Collisions.Statistics,
-            renderer.Statistics,
-            renderer.ViewportSize);
+        if (_performanceOverlay.IsVisible)
+        {
+            _performanceOverlay.Update(
+                frameTime,
+                Runtime,
+                _lastFixedStepCount,
+                Reality.Scene.Collisions.Statistics,
+                renderer.Statistics,
+                PerformanceDisplayMetrics.Create(
+                    Window.Size,
+                    Window.DisplayState,
+                    Window.VSync,
+                    Window.FramebufferSize,
+                    renderer.ViewportOffset,
+                    renderer.ViewportSize,
+                    Gui));
+        }
         Reality.Render(renderer, Gui);
     }
 

@@ -200,7 +200,7 @@ public sealed class GuiSystem
         element.Render(renderer);
     }
 
-    private float GetRenderScale(Vector2D<int> viewportSize)
+    internal float GetRenderScale(Vector2D<int> viewportSize)
     {
         return Math.Max(1, viewportSize.Y) / _referenceHeight;
     }

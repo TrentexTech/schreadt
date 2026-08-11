@@ -51,8 +51,16 @@ internal static class BitmapFont5x7
         [','] = [0, 0, 0, 0, 6, 6, 4],
         ['-'] = [0, 0, 0, 31, 0, 0, 0],
         ['/'] = [1, 1, 2, 4, 8, 16, 16],
+        ['['] = [14, 8, 8, 8, 8, 8, 14],
+        [']'] = [14, 2, 2, 2, 2, 2, 14],
         ['?'] = [14, 17, 1, 2, 4, 0, 4]
     };
+
+    internal static bool Supports(char character)
+    {
+        var normalized = char.ToUpperInvariant(character);
+        return Glyphs.ContainsKey(normalized);
+    }
 
     internal static byte[] GetGlyph(char character)
     {
