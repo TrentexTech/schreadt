@@ -64,6 +64,7 @@ internal sealed class PerformanceOverlay
             FPS: {framesPerSecond:F1}
             FRAME: {milliseconds:F2} MS  RANGE: {minimumMilliseconds:F2}-{maximumMilliseconds:F2}
             DRAW: {rendering.DrawCallCount}  PRIM: {rendering.PrimitiveCount}  VERT: {rendering.VertexCount}
+            UPLOAD: {rendering.TextureUploadCount}  DATA: {FormatBytes(rendering.TextureUploadByteCount)}
             SIM: {simulationState}  FIXED: {fixedStepCount}  SCALE: {runtime.TimeScale:F2}
             PHYS: {collisions.ActiveColliderCount}/{collisions.RegisteredColliderCount}  CONTACT: {collisions.ContactCount}
             CHECKS: {collisions.PairCheckCount} PAIR  {collisions.NarrowPhaseTestCount} NARROW
@@ -75,6 +76,13 @@ internal sealed class PerformanceOverlay
         _rangeElapsed %= 1.0;
         _minimumFrameTime = double.PositiveInfinity;
         _maximumFrameTime = 0.0;
+    }
+
+    private static string FormatBytes(long byteCount)
+    {
+        if (byteCount < 1024) return FormattableString.Invariant($"{byteCount} B");
+        if (byteCount < 1024 * 1024) return FormattableString.Invariant($"{byteCount / 1024.0:F1} KB");
+        return FormattableString.Invariant($"{byteCount / (1024.0 * 1024.0):F2} MB");
     }
 
     private sealed class PerformanceOverlayRoot : GuiElement
@@ -92,7 +100,8 @@ internal sealed class PerformanceOverlay
         {
             Label = _panel.AddLabel(
                 "FPS: --\nFRAME: -- MS  RANGE: --\nDRAW: --  PRIM: --  VERT: --\n" +
-                "SIM: --  FIXED: --  SCALE: --\nPHYS: --  CONTACT: --\nCHECKS: --\n" +
+                "UPLOAD: --  DATA: --\nSIM: --  FIXED: --  SCALE: --\n" +
+                "PHYS: --  CONTACT: --\nCHECKS: --\n" +
                 "VIEW: --\nMEM: --  GC: --");
         }
 

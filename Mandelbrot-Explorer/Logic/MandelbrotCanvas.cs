@@ -1,14 +1,21 @@
+using System.Diagnostics;
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Core;
 using Silk.NET.Maths;
 
 namespace Mandelbrot_Explorer.Logic;
 
+internal delegate Task<byte[]> MandelbrotRenderAsync(
+    MandelbrotView view,
+    int width,
+    int height,
+    int palette,
+    CancellationToken cancellationToken);
+
 internal sealed class MandelbrotCanvas : GameObject
 {
     private const int PixelWidth = 1280;
     private const int PixelHeight = 720;
-    private const double AspectRatio = (double)PixelWidth / PixelHeight;
     private static readonly MandelbrotView DefaultView = new(-0.5, 0.0, 3.5, 160);
     private static readonly MandelbrotView[] Landmarks =
     [
@@ -18,23 +25,43 @@ internal sealed class MandelbrotCanvas : GameObject
         new MandelbrotView(-0.77654, -0.136641, 0.00015, 288)
     ];
 
-    private byte[] _pixels = [];
+    private readonly int _pixelWidth;
+    private readonly int _pixelHeight;
+    private readonly double _aspectRatio;
+    private readonly MandelbrotRenderAsync _renderAsync;
+    private readonly List<GenerationWork> _retiredGenerations = [];
+    private PixelSurface? _surface;
+    private GenerationWork? _generation;
+    private long _nextGenerationId;
     private int _palette;
 
     internal MandelbrotView View { get; private set; } = DefaultView;
     internal string PaletteName => MandelbrotGenerator.PaletteNames[_palette];
+    internal bool IsGenerating => _generation is not null;
+    internal PixelSurface Surface => _surface
+        ?? throw new InvalidOperationException("The Mandelbrot canvas is not initialized.");
 
     internal event Action? Changed;
 
-    internal MandelbrotCanvas()
+    internal MandelbrotCanvas() : this(PixelWidth, PixelHeight, MandelbrotGenerator.RenderAsync)
     {
-        Regenerate();
+    }
+
+    internal MandelbrotCanvas(int pixelWidth, int pixelHeight, MandelbrotRenderAsync renderAsync)
+    {
+        if (pixelWidth <= 1) throw new ArgumentOutOfRangeException(nameof(pixelWidth));
+        if (pixelHeight <= 1) throw new ArgumentOutOfRangeException(nameof(pixelHeight));
+
+        _pixelWidth = pixelWidth;
+        _pixelHeight = pixelHeight;
+        _aspectRatio = (double)pixelWidth / pixelHeight;
+        _renderAsync = renderAsync ?? throw new ArgumentNullException(nameof(renderAsync));
     }
 
     internal void Reset()
     {
         View = DefaultView;
-        Regenerate();
+        QueueGeneration();
     }
 
     internal void Pan(double horizontalFraction, double verticalFraction)
@@ -42,15 +69,15 @@ internal sealed class MandelbrotCanvas : GameObject
         View = View with
         {
             CenterX = View.CenterX + View.Width * horizontalFraction,
-            CenterY = View.CenterY + View.Height(AspectRatio) * verticalFraction
+            CenterY = View.CenterY + View.Height(_aspectRatio) * verticalFraction
         };
-        Regenerate();
+        QueueGeneration();
     }
 
     internal void ZoomAt(Vector2D<double> viewportPoint, double factor)
     {
-        View = View.ZoomAt(viewportPoint, factor, AspectRatio);
-        Regenerate();
+        View = View.ZoomAt(viewportPoint, factor, _aspectRatio);
+        QueueGeneration();
     }
 
     internal void ChangeIterations(int amount)
@@ -58,20 +85,72 @@ internal sealed class MandelbrotCanvas : GameObject
         var iterations = Math.Clamp(View.MaxIterations + amount, 32, 1024);
         if (iterations == View.MaxIterations) return;
         View = View with { MaxIterations = iterations };
-        Regenerate();
+        QueueGeneration();
     }
 
     internal void CyclePalette()
     {
         _palette = (_palette + 1) % MandelbrotGenerator.PaletteNames.Count;
-        Regenerate();
+        QueueGeneration();
     }
 
     internal void LoadLandmark(int index)
     {
         if ((uint)index >= Landmarks.Length) throw new ArgumentOutOfRangeException(nameof(index));
         View = Landmarks[index];
-        Regenerate();
+        QueueGeneration();
+    }
+
+    protected override void OnInit()
+    {
+        _surface = new PixelSurface(_pixelWidth, _pixelHeight);
+        QueueGeneration();
+    }
+
+    protected override void OnUpdate(double dt)
+    {
+        DrainRetiredGenerations();
+        if (_generation is not { Task.IsCompleted: true } generation) return;
+
+        _generation = null;
+        try
+        {
+            if (generation.Task.IsCanceled)
+            {
+                EngineLog.Debug($"Mandelbrot generation {generation.Id} was canceled.", "Mandelbrot");
+                return;
+            }
+
+            if (generation.Task.IsFaulted)
+            {
+                var exception = generation.Task.Exception?.GetBaseException();
+                EngineLog.Error(
+                    $"Mandelbrot generation {generation.Id} failed.",
+                    exception,
+                    "Mandelbrot");
+                return;
+            }
+
+            var pixels = generation.Task.GetAwaiter().GetResult();
+            Surface.Update(pixels);
+            var elapsed = Stopwatch.GetElapsedTime(generation.StartedTimestamp);
+            EngineLog.Debug(
+                $"Mandelbrot generation {generation.Id} published in {elapsed.TotalMilliseconds:F1} ms; " +
+                $"surface version {Surface.Version}.",
+                "Mandelbrot");
+        }
+        catch (Exception exception)
+        {
+            EngineLog.Error(
+                $"Mandelbrot generation {generation.Id} could not be published.",
+                exception,
+                "Mandelbrot");
+        }
+        finally
+        {
+            generation.Cancellation.Dispose();
+            Changed?.Invoke();
+        }
     }
 
     protected override void OnRender(IRenderContext2D renderer)
@@ -79,14 +158,127 @@ internal sealed class MandelbrotCanvas : GameObject
         if (renderer is not IPixelRenderContext2D pixelRenderer)
             throw new NotSupportedException("The Mandelbrot explorer requires pixel-buffer rendering support.");
 
-        pixelRenderer.DrawScreenPixels(_pixels, PixelWidth, PixelHeight, TextureSampling.Linear);
+        pixelRenderer.DrawScreenPixels(Surface, TextureSampling.Linear);
     }
 
-    private void Regenerate()
+    protected override void OnShutdown()
     {
-        _pixels = MandelbrotGenerator.Render(View, PixelWidth, PixelHeight, _palette);
+        if (_generation is not null)
+        {
+            AbandonGeneration(_generation);
+            _generation = null;
+        }
+
+        foreach (var generation in _retiredGenerations) AbandonGeneration(generation);
+        _retiredGenerations.Clear();
+        _surface?.Dispose();
+        _surface = null;
+    }
+
+    private void QueueGeneration()
+    {
+        if (_surface is null)
+        {
+            Changed?.Invoke();
+            return;
+        }
+
+        if (_generation is not null)
+        {
+            CancelGeneration(_generation);
+            _retiredGenerations.Add(_generation);
+        }
+
+        var cancellation = new CancellationTokenSource();
+        var generationId = checked(++_nextGenerationId);
+        var startedTimestamp = Stopwatch.GetTimestamp();
+        Task<byte[]> task;
+        try
+        {
+            task = _renderAsync(View, _pixelWidth, _pixelHeight, _palette, cancellation.Token)
+                ?? throw new InvalidOperationException("The Mandelbrot renderer returned no task.");
+        }
+        catch (Exception exception)
+        {
+            task = Task.FromException<byte[]>(exception);
+        }
+
+        _generation = new GenerationWork(generationId, cancellation, task, startedTimestamp);
+        EngineLog.Debug(
+            $"Queued Mandelbrot generation {generationId}: {_pixelWidth}x{_pixelHeight}, " +
+            $"{View.MaxIterations} iterations, palette {PaletteName}.",
+            "Mandelbrot");
         Changed?.Invoke();
     }
+
+    private void DrainRetiredGenerations()
+    {
+        for (var index = _retiredGenerations.Count - 1; index >= 0; index--)
+        {
+            var generation = _retiredGenerations[index];
+            if (!generation.Task.IsCompleted) continue;
+
+            ObserveAndDispose(generation);
+            _retiredGenerations.RemoveAt(index);
+        }
+    }
+
+    private static void CancelGeneration(GenerationWork generation)
+    {
+        try
+        {
+            generation.Cancellation.Cancel();
+        }
+        catch (Exception exception)
+        {
+            EngineLog.Error(
+                $"Cancellation callbacks for Mandelbrot generation {generation.Id} failed.",
+                exception,
+                "Mandelbrot");
+        }
+    }
+
+    private static void AbandonGeneration(GenerationWork generation)
+    {
+        CancelGeneration(generation);
+        if (generation.Task.IsCompleted)
+        {
+            ObserveAndDispose(generation);
+            return;
+        }
+
+        _ = generation.Task.ContinueWith(
+            static (_, state) => ObserveAndDispose((GenerationWork)state!),
+            generation,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    private static void ObserveAndDispose(GenerationWork generation)
+    {
+        if (generation.Task.IsFaulted)
+        {
+            var exception = generation.Task.Exception?.GetBaseException();
+            if (exception is not OperationCanceledException)
+            {
+                EngineLog.Error(
+                    $"Obsolete Mandelbrot generation {generation.Id} failed.",
+                    exception,
+                    "Mandelbrot");
+            }
+
+            _ = generation.Task.Exception;
+        }
+
+        generation.Cancellation.Dispose();
+    }
+
+    private sealed record GenerationWork(
+        long Id,
+        CancellationTokenSource Cancellation,
+        Task<byte[]> Task,
+        long StartedTimestamp);
 }
 
 internal readonly record struct MandelbrotView(double CenterX, double CenterY, double Width, int MaxIterations)
@@ -122,18 +314,36 @@ internal static class MandelbrotGenerator
     internal static IReadOnlyList<string> PaletteNames { get; } = ["NEON TIDE", "SOLAR FLARE", "AURORA"];
 
     internal static byte[] Render(MandelbrotView view, int width, int height, int palette)
+        => Render(view, width, height, palette, CancellationToken.None);
+
+    internal static Task<byte[]> RenderAsync(
+        MandelbrotView view,
+        int width,
+        int height,
+        int palette,
+        CancellationToken cancellationToken)
+        => Task.Run(() => Render(view, width, height, palette, cancellationToken), cancellationToken);
+
+    internal static byte[] Render(
+        MandelbrotView view,
+        int width,
+        int height,
+        int palette,
+        CancellationToken cancellationToken)
     {
         if (width <= 1) throw new ArgumentOutOfRangeException(nameof(width));
         if (height <= 1) throw new ArgumentOutOfRangeException(nameof(height));
         if ((uint)palette >= PaletteNames.Count) throw new ArgumentOutOfRangeException(nameof(palette));
+        cancellationToken.ThrowIfCancellationRequested();
 
         var pixels = new byte[checked(width * height * 4)];
         var viewHeight = view.Height((double)width / height);
-        Parallel.For(0, height, pixelY =>
+        Parallel.For(0, height, new ParallelOptions { CancellationToken = cancellationToken }, pixelY =>
         {
             var imaginary = view.CenterY + (0.5 - (double)pixelY / (height - 1)) * viewHeight;
             for (var pixelX = 0; pixelX < width; pixelX++)
             {
+                if ((pixelX & 63) == 0) cancellationToken.ThrowIfCancellationRequested();
                 var real = view.CenterX + ((double)pixelX / (width - 1) - 0.5) * view.Width;
                 var offset = (pixelY * width + pixelX) * 4;
                 WritePixel(pixels, offset, real, imaginary, view.MaxIterations, palette);

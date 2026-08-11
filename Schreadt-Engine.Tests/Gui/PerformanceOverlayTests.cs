@@ -36,7 +36,7 @@ public sealed class PerformanceOverlayTests
             runtime,
             fixedStepCount: 2,
             new CollisionStatistics2D(10, 8, 3, 28, 12, 2),
-            new RenderStatistics(14, 92, 276),
+            new RenderStatistics(14, 92, 276, 1, 1280L * 720 * 4),
             renderer.ViewportSize);
         gui.Render(renderer);
 
@@ -44,6 +44,7 @@ public sealed class PerformanceOverlayTests
         Assert.Contains("FPS: 60.0", text);
         Assert.Contains("FRAME: 16.67 MS", text);
         Assert.Contains("DRAW: 14  PRIM: 92  VERT: 276", text);
+        Assert.Contains("UPLOAD: 1  DATA: 3.52 MB", text);
         Assert.Contains("SIM: RUNNING  FIXED: 2  SCALE: 1.00", text);
         Assert.Contains("PHYS: 8/10  CONTACT: 2", text);
         Assert.Contains("CHECKS: 28 PAIR  12 NARROW", text);

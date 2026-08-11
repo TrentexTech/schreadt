@@ -103,7 +103,8 @@ public sealed class Renderer : IRenderer2D
     private readonly int _spriteAxisYUniform;
     private readonly int _spriteRegionUniform;
     private readonly int _spriteTintUniform;
-    private readonly uint _pixelTexture;
+    private readonly PixelSurfaceUploadState _pixelUploadState = new();
+    private uint _pixelTexture;
 
     private int _framebufferWidth = 1;
     private int _framebufferHeight = 1;
@@ -120,6 +121,8 @@ public sealed class Renderer : IRenderer2D
     private int _frameDrawCallCount;
     private int _framePrimitiveCount;
     private int _frameVertexCount;
+    private int _frameTextureUploadCount;
+    private long _frameTextureUploadByteCount;
 
     public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
@@ -157,11 +160,7 @@ public sealed class Renderer : IRenderer2D
         _gl.UseProgram(_spriteShaderProgram);
         _gl.Uniform1(_gl.GetUniformLocation(_spriteShaderProgram, "uTexture"), 0);
 
-        _pixelTexture = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
-        _gl.BindTexture(TextureTarget.Texture2D, 0);
+        CreatePixelTexture();
 
         _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         _gl.Enable(EnableCap.Blend);
@@ -182,6 +181,8 @@ public sealed class Renderer : IRenderer2D
         _frameDrawCallCount = 0;
         _framePrimitiveCount = 0;
         _frameVertexCount = 0;
+        _frameTextureUploadCount = 0;
+        _frameTextureUploadByteCount = 0;
         _renderingFrame = true;
 
         try
@@ -199,7 +200,9 @@ public sealed class Renderer : IRenderer2D
             Statistics = new RenderStatistics(
                 _frameDrawCallCount,
                 _framePrimitiveCount,
-                _frameVertexCount);
+                _frameVertexCount,
+                _frameTextureUploadCount,
+                _frameTextureUploadByteCount);
         }
     }
 
@@ -476,54 +479,62 @@ public sealed class Renderer : IRenderer2D
     }
 
     public unsafe void DrawScreenPixels(
-        ReadOnlySpan<byte> rgbaPixels,
-        int pixelWidth,
-        int pixelHeight,
+        PixelSurface surface,
         TextureSampling sampling = TextureSampling.Nearest)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!_renderingFrame) throw new InvalidOperationException("Pixel buffers must be drawn while rendering a frame.");
-        if (pixelWidth <= 0) throw new ArgumentOutOfRangeException(nameof(pixelWidth));
-        if (pixelHeight <= 0) throw new ArgumentOutOfRangeException(nameof(pixelHeight));
+        ArgumentNullException.ThrowIfNull(surface);
 
-        int expectedLength;
-        try
-        {
-            expectedLength = checked(pixelWidth * pixelHeight * 4);
-        }
-        catch (OverflowException)
-        {
-            throw new ArgumentOutOfRangeException(nameof(pixelWidth), "Pixel buffer dimensions are too large.");
-        }
-
-        if (rgbaPixels.Length != expectedLength)
-            throw new ArgumentException(
-                $"The pixel buffer must contain exactly {expectedLength} RGBA bytes.",
-                nameof(rgbaPixels));
-
+        var rgbaPixels = surface.Pixels.Span;
+        EnsurePixelTexture();
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
         SetPixelTextureSampling(sampling);
-        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        if (_pixelBufferWidth != pixelWidth || _pixelBufferHeight != pixelHeight)
-        {
-            _pixelBufferWidth = pixelWidth;
-            _pixelBufferHeight = pixelHeight;
-            EngineLog.Debug($"Pixel-buffer source changed to {pixelWidth}x{pixelHeight} RGBA.", "Renderer");
-        }
-
-        fixed (byte* data = rgbaPixels)
+        if (_pixelBufferWidth != surface.Width || _pixelBufferHeight != surface.Height)
         {
             _gl.TexImage2D(
                 TextureTarget.Texture2D,
                 0,
                 InternalFormat.Rgba8,
-                (uint)pixelWidth,
-                (uint)pixelHeight,
+                (uint)surface.Width,
+                (uint)surface.Height,
                 0,
                 PixelFormat.Rgba,
                 PixelType.UnsignedByte,
-                data);
+                (void*)null);
+            _pixelBufferWidth = surface.Width;
+            _pixelBufferHeight = surface.Height;
+            EngineLog.Debug($"Pixel-surface storage changed to {surface.Width}x{surface.Height} RGBA.", "Renderer");
+        }
+
+        if (_pixelUploadState.RequiresUpload(surface))
+        {
+            _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
+            fixed (byte* data = rgbaPixels)
+            {
+                _gl.TexSubImage2D(
+                    TextureTarget.Texture2D,
+                    0,
+                    0,
+                    0,
+                    (uint)surface.Width,
+                    (uint)surface.Height,
+                    PixelFormat.Rgba,
+                    PixelType.UnsignedByte,
+                    data);
+            }
+
+            var previousSurface = _pixelUploadState.Surface;
+            _pixelUploadState.MarkUploaded(surface);
+            if (!ReferenceEquals(previousSurface, surface))
+            {
+                if (previousSurface is not null) previousSurface.Disposed -= OnPixelSurfaceDisposed;
+                surface.Disposed += OnPixelSurfaceDisposed;
+            }
+
+            _frameTextureUploadCount++;
+            _frameTextureUploadByteCount += rgbaPixels.Length;
         }
 
         _gl.UseProgram(_spriteShaderProgram);
@@ -544,7 +555,9 @@ public sealed class Renderer : IRenderer2D
 
         foreach (var texture in _textures.Values) _gl.DeleteTexture(texture.Handle);
         _textures.Clear();
-        _gl.DeleteTexture(_pixelTexture);
+        if (_pixelUploadState.Surface is { } pixelSurface) pixelSurface.Disposed -= OnPixelSurfaceDisposed;
+        _pixelUploadState.Clear();
+        DeletePixelTexture();
         _gl.DeleteBuffer(_spriteVertexBuffer);
         _gl.DeleteVertexArray(_spriteVertexArray);
         _gl.DeleteProgram(_spriteShaderProgram);
@@ -682,7 +695,43 @@ public sealed class Renderer : IRenderer2D
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
         _gl.BindTexture(TextureTarget.Texture2D, 0);
+        _frameTextureUploadCount++;
+        _frameTextureUploadByteCount += pixels.Length;
         return new Texture2D(handle, image.Id, image.Width, image.Height);
+    }
+
+    private void CreatePixelTexture()
+    {
+        _pixelTexture = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+        _pixelTextureSampling = null;
+    }
+
+    private void EnsurePixelTexture()
+    {
+        if (_pixelTexture == 0) CreatePixelTexture();
+    }
+
+    private void DeletePixelTexture()
+    {
+        if (_pixelTexture == 0) return;
+
+        _gl.DeleteTexture(_pixelTexture);
+        _pixelTexture = 0;
+        _pixelTextureSampling = null;
+        _pixelBufferWidth = 0;
+        _pixelBufferHeight = 0;
+    }
+
+    private void OnPixelSurfaceDisposed(PixelSurface surface)
+    {
+        if (!_pixelUploadState.Forget(surface)) return;
+
+        surface.Disposed -= OnPixelSurfaceDisposed;
+        if (!_disposed) DeletePixelTexture();
     }
 
     private void SetTextureSampling(Texture2D texture, TextureSampling sampling)

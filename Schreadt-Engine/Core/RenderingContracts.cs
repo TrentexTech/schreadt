@@ -8,7 +8,9 @@ namespace Schreadt_Engine.Core;
 public readonly record struct RenderStatistics(
     int DrawCallCount,
     int PrimitiveCount,
-    int VertexCount);
+    int VertexCount,
+    int TextureUploadCount = 0,
+    long TextureUploadByteCount = 0);
 
 /// <summary>
 /// Receives backend-independent two-dimensional draw commands.
@@ -56,16 +58,15 @@ public interface IRenderContext2D
 }
 
 /// <summary>
-/// Extends two-dimensional rendering with a viewport-sized RGBA pixel buffer.
+/// Extends two-dimensional rendering with a viewport-sized RGBA pixel surface.
 /// Pixel rows are ordered from top to bottom and each pixel contains four bytes
-/// in red, green, blue, alpha order.
+/// in red, green, blue, alpha order. A surface is uploaded only when its version
+/// advances.
 /// </summary>
 public interface IPixelRenderContext2D : IRenderContext2D
 {
     void DrawScreenPixels(
-        ReadOnlySpan<byte> rgbaPixels,
-        int pixelWidth,
-        int pixelHeight,
+        PixelSurface surface,
         TextureSampling sampling = TextureSampling.Nearest);
 }
 
