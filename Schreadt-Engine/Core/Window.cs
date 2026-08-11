@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component;
 using Silk.NET.Maths;
@@ -13,10 +13,14 @@ public sealed unsafe class Window : IWindowController
 {
     private readonly Application _app;
     private readonly IAssetProvider _assets;
+    private readonly PfnEventFilter _windowEventWatch;
     private IRenderer2D? _renderer;
     private SdlApi? _sdl;
     private SdlWindow* _window;
     private void* _glContext;
+    private WindowFrameDispatcher? _frameDispatcher;
+    private ExceptionDispatchInfo? _eventWatchFailure;
+    private uint _windowId;
     private WindowDisplayState _windowedState = WindowDisplayState.Normal;
     private string _title;
     private Vector2D<int> _size;
@@ -26,6 +30,8 @@ public sealed unsafe class Window : IWindowController
     private bool _loaded;
     private bool _closeRequested;
     private bool _closing;
+    private bool _eventWatchRegistered;
+    private bool _liveInteractionFrameRendered;
 
     public string Title
     {
@@ -111,6 +117,7 @@ public sealed unsafe class Window : IWindowController
         ArgumentNullException.ThrowIfNull(assets);
         _app = app;
         _assets = assets;
+        _windowEventWatch = new PfnEventFilter(WatchWindowEvent);
         _title = Config.Data.Window.Title;
         _size = new Vector2D<int>(Config.Data.Window.DefaultSize.Width, Config.Data.Window.DefaultSize.Height);
         EngineLog.Debug($"Window configured as '{_title}' at {_size.X}x{_size.Y}.", "Window");
@@ -178,6 +185,8 @@ public sealed unsafe class Window : IWindowController
             _size.Y,
             (uint)flags);
         if (_window == null) ThrowSdlError("create the window");
+        _windowId = _sdl.GetWindowID(_window);
+        if (_windowId == 0) ThrowSdlError("retrieve the window ID");
 
         _glContext = _sdl.GLCreateContext(_window);
         if (_glContext == null) ThrowSdlError("create the OpenGL context");
@@ -205,25 +214,35 @@ public sealed unsafe class Window : IWindowController
     private void RunMainLoop()
     {
         EngineLog.Information("Main loop started.", "Window");
-        var previousTimestamp = Stopwatch.GetTimestamp();
-
-        while (!_closeRequested)
+        _frameDispatcher = new WindowFrameDispatcher(Environment.CurrentManagedThreadId);
+        try
         {
-            PollEvents();
-            if (_closeRequested) break;
+            RegisterWindowEventWatch();
+            while (!_closeRequested)
+            {
+                PollEvents();
+                ThrowEventWatchFailure();
+                if (_closeRequested) break;
 
-            var timestamp = Stopwatch.GetTimestamp();
-            var frameTime = (timestamp - previousTimestamp) / (double)Stopwatch.Frequency;
-            previousTimestamp = timestamp;
-
-            _app.Update(frameTime);
-            if (_closeRequested) break;
-
-            _app.Render(_renderer!, frameTime);
-            _sdl!.GLSwapWindow(_window);
+                _frameDispatcher.TryDispatch(Environment.CurrentManagedThreadId, RunFrame);
+            }
+        }
+        finally
+        {
+            UnregisterWindowEventWatch();
+            _frameDispatcher = null;
         }
 
         EngineLog.Information($"Main loop exited after {_app.Runtime.FrameCount} frame(s).", "Window");
+    }
+
+    private void RunFrame(double frameTime)
+    {
+        _app.Update(frameTime);
+        if (_closeRequested) return;
+
+        _app.Render(_renderer!, frameTime);
+        _sdl!.GLSwapWindow(_window);
     }
 
     private void PollEvents()
@@ -282,6 +301,9 @@ public sealed unsafe class Window : IWindowController
                 _size = new Vector2D<int>(windowEvent.Data1, windowEvent.Data2);
                 ResizeRenderer();
                 break;
+            case WindowEventID.Moved:
+                ResizeRenderer();
+                break;
             case WindowEventID.Minimized:
                 if (!IsFullscreen(_displayState)) _displayState = WindowDisplayState.Minimized;
                 EngineLog.Debug("Window minimized.", "Window");
@@ -329,6 +351,72 @@ public sealed unsafe class Window : IWindowController
         _app.Gui.SetViewportSizes(framebufferSize, windowSize, _renderer.ViewportOffset, _renderer.ViewportSize);
     }
 
+    private int WatchWindowEvent(void* userData, Event* watchedEvent)
+    {
+        if (watchedEvent is null || watchedEvent->Type != (uint)EventType.Windowevent) return 1;
+
+        var windowEvent = watchedEvent->Window;
+        var eventId = (WindowEventID)windowEvent.Event;
+        if (windowEvent.WindowID != _windowId || !IsLiveInteractionEvent(eventId)) return 1;
+
+        var dispatcher = _frameDispatcher;
+        if (dispatcher is null || !dispatcher.IsOwnerThread(Environment.CurrentManagedThreadId)) return 1;
+        if (_closing || !_loaded || _renderer is null || _sdl is null || _window == null) return 1;
+        if (Volatile.Read(ref _eventWatchFailure) is not null) return 1;
+
+        try
+        {
+            switch (eventId)
+            {
+                case WindowEventID.Resized:
+                case WindowEventID.SizeChanged:
+                    _size = new Vector2D<int>(windowEvent.Data1, windowEvent.Data2);
+                    ResizeRenderer();
+                    break;
+                case WindowEventID.Moved:
+                    ResizeRenderer();
+                    break;
+            }
+
+            if (dispatcher.TryDispatch(Environment.CurrentManagedThreadId, RunFrame) &&
+                eventId != WindowEventID.Exposed &&
+                !_liveInteractionFrameRendered)
+            {
+                _liveInteractionFrameRendered = true;
+                EngineLog.Information($"Rendered a frame during live window interaction ({eventId}).", "Window");
+            }
+        }
+        catch (Exception exception)
+        {
+            Interlocked.CompareExchange(
+                ref _eventWatchFailure,
+                ExceptionDispatchInfo.Capture(exception),
+                null);
+        }
+
+        return 1;
+    }
+
+    private void RegisterWindowEventWatch()
+    {
+        if (_eventWatchRegistered) return;
+        _sdl!.AddEventWatch(_windowEventWatch, null);
+        _eventWatchRegistered = true;
+        EngineLog.Debug("SDL live window-interaction rendering enabled.", "Window");
+    }
+
+    private void UnregisterWindowEventWatch()
+    {
+        if (!_eventWatchRegistered || _sdl is null) return;
+        _sdl.DelEventWatch(_windowEventWatch, null);
+        _eventWatchRegistered = false;
+    }
+
+    private void ThrowEventWatchFailure()
+    {
+        Interlocked.Exchange(ref _eventWatchFailure, null)?.Throw();
+    }
+
     private void Close()
     {
         if (_closing) return;
@@ -338,6 +426,7 @@ public sealed unsafe class Window : IWindowController
 
         try
         {
+            UnregisterWindowEventWatch();
             _app.Shutdown();
         }
         finally
@@ -448,5 +537,13 @@ public sealed unsafe class Window : IWindowController
     private static bool IsFullscreen(WindowDisplayState currentState)
     {
         return currentState is WindowDisplayState.Fullscreen or WindowDisplayState.BorderlessFullscreen;
+    }
+
+    internal static bool IsLiveInteractionEvent(WindowEventID eventId)
+    {
+        return eventId is WindowEventID.Moved or
+            WindowEventID.Resized or
+            WindowEventID.SizeChanged or
+            WindowEventID.Exposed;
     }
 }
