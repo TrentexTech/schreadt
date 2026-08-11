@@ -2,10 +2,10 @@
 
 ## Reproducible SDK and restore
 
-Schreadt targets .NET 10 and pins the 10.0.1xx SDK feature band through the root
-`global.json`. SDK 10.0.100 or a newer servicing patch in that feature band is
-accepted; prerelease, later feature-band, and later major-version SDKs are not
-selected automatically. Confirm the selected SDK from the repository root:
+Schreadt targets .NET 10 and pins SDK 10.0.100 exactly through the root
+`global.json`. SDK roll-forward and prerelease selection are disabled because
+SDK servicing releases can change implicit build dependencies such as
+`Microsoft.NET.ILLink.Tasks`. Confirm the selected SDK from the repository root:
 
 ```powershell
 dotnet --version
