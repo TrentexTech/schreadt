@@ -1,3 +1,5 @@
+using Schreadt_Engine.Core;
+
 namespace Schreadt_Engine.Component;
 
 public abstract class GameComponent
@@ -8,6 +10,8 @@ public abstract class GameComponent
         ?? throw new InvalidOperationException("The component is not attached to a game object.");
 
     public bool Attached => _owner is not null;
+
+    protected IEngineContext Context => Owner.Context;
 
     internal bool IsOwnedBy(GameObject owner) => ReferenceEquals(_owner, owner);
 

@@ -7,8 +7,11 @@ namespace Schreadt_Engine.Core;
 public class Reality : IUpdateable
 {
     private bool _initialized;
+    private IEngineContext? _context;
 
     public GameLogic? GameLogic { get; }
+    public IEngineContext Context => _context
+        ?? throw new InvalidOperationException("The reality has not been attached to an engine context.");
     public SceneManager Scenes { get; }
     public Scene Scene => Scenes.CurrentScene
         ?? throw new InvalidOperationException("No scene is currently loaded.");
@@ -20,6 +23,16 @@ public class Reality : IUpdateable
         MainCamera = new Camera();
         GameLogic = gameLogic;
         GameLogic?.Attach(this);
+    }
+
+    internal void AttachContext(IEngineContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (_context is not null)
+            throw new InvalidOperationException("The reality is already attached to an engine context.");
+
+        _context = context;
+        Scenes.SetContext(context);
     }
 
     internal void Init()

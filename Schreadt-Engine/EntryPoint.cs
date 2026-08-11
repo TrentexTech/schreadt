@@ -16,11 +16,10 @@ public static class EntryPoint
 
     private static void Start(string[] args, GameLogic? gameLogic)
     {
-        State.LaunchArgs = args;
         EngineLog.Initialize();
         try
         {
-            EngineMain.Init(gameLogic);
+            EngineMain.Init(gameLogic, args);
             EngineMain.Start();
         }
         catch (Exception exception)

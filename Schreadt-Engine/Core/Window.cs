@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
@@ -11,6 +12,7 @@ namespace Schreadt_Engine.Core;
 public sealed unsafe class Window : IWindowController
 {
     private readonly Application _app;
+    private readonly IAssetProvider _assets;
     private IRenderer2D? _renderer;
     private SdlApi? _sdl;
     private SdlWindow* _window;
@@ -103,9 +105,12 @@ public sealed unsafe class Window : IWindowController
 
     public bool IsCloseRequested => _closeRequested;
 
-    internal Window(Application app)
+    internal Window(Application app, IAssetProvider assets)
     {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(assets);
         _app = app;
+        _assets = assets;
         _title = Config.Data.Window.Title;
         _size = new Vector2D<int>(Config.Data.Window.DefaultSize.Width, Config.Data.Window.DefaultSize.Height);
         EngineLog.Debug($"Window configured as '{_title}' at {_size.X}x{_size.Y}.", "Window");
@@ -181,7 +186,7 @@ public sealed unsafe class Window : IWindowController
 
         var gl = GL.GetApi(name => (nint)_sdl.GLGetProcAddress(name));
         var defaultSize = Config.Data.Window.DefaultSize;
-        _renderer = new Renderer(gl, State.Assets, (double)defaultSize.Width / defaultSize.Height);
+        _renderer = new Renderer(gl, _assets, (double)defaultSize.Width / defaultSize.Height);
         _loaded = true;
         if (_displayState != WindowDisplayState.Normal)
             ApplyDisplayState(WindowDisplayState.Normal, _displayState);

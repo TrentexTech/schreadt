@@ -5,60 +5,62 @@ namespace Schreadt_Engine.Core;
 
 public static class State
 {
-    private static Reality? _currentReality;
-    private static IInputService? _input;
-    private static GuiSystem? _gui;
-    private static AssetCatalog? _assets;
-    private static IWindowController? _window;
-    private static RuntimeController? _runtime;
+    private static readonly object Sync = new();
+    private static StateSnapshot? _current;
 
-    public static string[] LaunchArgs { get; internal set; } = [];
+    [Obsolete("Use IEngineContext.LaunchArgs from the engine lifecycle context.")]
+    public static string[] LaunchArgs => Current?.Context.LaunchArgs.ToArray() ?? [];
 
-    public static Reality CurrentReality => _currentReality
-                                            ?? throw new InvalidOperationException("The engine has not initialized its reality yet.");
+    [Obsolete("Use the Reality or IEngineContext supplied by the engine lifecycle.")]
+    public static Reality CurrentReality => RequireCurrent().Reality;
 
-    public static IInputService Input => _input
-                                         ?? throw new InvalidOperationException("The engine has not initialized input yet.");
+    [Obsolete("Use IEngineContext.Input from the engine lifecycle context.")]
+    public static IInputService Input => RequireCurrent().Context.Input;
 
-    public static GuiSystem Gui => _gui
-                                   ?? throw new InvalidOperationException("The engine has not initialized its GUI yet.");
+    [Obsolete("Use IEngineContext.Gui from the engine lifecycle context.")]
+    public static GuiSystem Gui => RequireCurrent().Context.Gui;
 
-    public static AssetCatalog Assets => _assets
-                                         ?? throw new InvalidOperationException("The engine has not loaded its assets yet.");
+    [Obsolete("Use IEngineContext.Assets from the engine lifecycle context.")]
+    public static AssetCatalog Assets => RequireCurrent().Context.Assets as AssetCatalog
+        ?? throw new InvalidOperationException("The compatibility facade requires an AssetCatalog instance.");
 
-    public static IWindowController Window => _window
-                                               ?? throw new InvalidOperationException("The engine has not initialized its window yet.");
+    [Obsolete("Use IEngineContext.Window from the engine lifecycle context.")]
+    public static IWindowController Window => RequireCurrent().Context.Window;
 
-    public static RuntimeController Runtime => _runtime
-                                                ?? throw new InvalidOperationException("The engine has not initialized its runtime yet.");
+    [Obsolete("Use IEngineContext.Runtime from the engine lifecycle context.")]
+    public static RuntimeController Runtime => RequireCurrent().Context.Runtime;
 
-    internal static void SetCurrentReality(Reality reality)
+    internal static IEngineContext? CurrentContext => Current?.Context;
+
+    internal static void Publish(IEngineContext context, Reality reality)
     {
-        _currentReality = reality;
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(reality);
+
+        lock (Sync)
+        {
+            if (_current is not null)
+                throw new InvalidOperationException("An engine context is already published for this process.");
+
+            Volatile.Write(ref _current, new StateSnapshot(context, reality));
+        }
     }
 
-    internal static void SetInput(IInputService input)
+    internal static void Reset(IEngineContext context)
     {
-        _input = input;
+        ArgumentNullException.ThrowIfNull(context);
+
+        lock (Sync)
+        {
+            if (_current is not null && ReferenceEquals(_current.Context, context))
+                Volatile.Write(ref _current, null);
+        }
     }
 
-    internal static void SetGui(GuiSystem gui)
-    {
-        _gui = gui;
-    }
+    private static StateSnapshot? Current => Volatile.Read(ref _current);
 
-    internal static void SetAssets(AssetCatalog? assets)
-    {
-        _assets = assets;
-    }
+    private static StateSnapshot RequireCurrent() => Current
+        ?? throw new InvalidOperationException("The engine has not published an initialized context yet.");
 
-    internal static void SetWindow(IWindowController window)
-    {
-        _window = window;
-    }
-
-    internal static void SetRuntime(RuntimeController runtime)
-    {
-        _runtime = runtime;
-    }
+    private sealed record StateSnapshot(IEngineContext Context, Reality Reality);
 }

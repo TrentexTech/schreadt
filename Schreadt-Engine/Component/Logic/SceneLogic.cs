@@ -1,3 +1,5 @@
+using Schreadt_Engine.Core;
+
 namespace Schreadt_Engine.Component.Logic;
 
 public abstract class SceneLogic : IInitializable, IUpdateable, IFixedUpdateable, IShutdownable
@@ -6,6 +8,8 @@ public abstract class SceneLogic : IInitializable, IUpdateable, IFixedUpdateable
 
     protected Scene Scene => _scene
         ?? throw new InvalidOperationException("Scene logic has not been attached to a scene.");
+
+    protected IEngineContext Context => Scene.Context;
 
     internal void Attach(Scene scene)
     {

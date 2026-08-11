@@ -94,7 +94,7 @@ internal sealed class PlatformerPlayerLogic : ActorLogic
         _body.Velocity = Vector2D<double>.Zero;
         StatsChanged?.Invoke();
 
-        var camera = State.CurrentReality.MainCamera;
+        var camera = Context.MainCamera;
         var shake = camera.GetComponent<CameraShake2D>() ?? camera.AddComponent(new CameraShake2D());
         shake.Shake(0.22, 0.07, 0.012);
     }

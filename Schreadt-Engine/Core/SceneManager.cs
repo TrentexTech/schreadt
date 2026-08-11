@@ -12,6 +12,7 @@ public sealed class SceneManager
     private readonly Dictionary<string, Func<SceneLogic>> _sceneFactories = new(StringComparer.Ordinal);
     private readonly GuiSystem? _gui;
     private readonly RuntimeController? _runtime;
+    private IEngineContext? _context;
     private string? _pendingSceneName;
     private bool _initialized;
 
@@ -95,6 +96,17 @@ public sealed class SceneManager
         }
     }
 
+    internal void SetContext(IEngineContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (_context is not null)
+            throw new InvalidOperationException("The scene manager is already attached to an engine context.");
+        if (_initialized || CurrentScene is not null)
+            throw new InvalidOperationException("The scene manager context must be assigned before initialization.");
+
+        _context = context;
+    }
+
     internal void Update(double dt)
     {
         if (!_initialized) throw new InvalidOperationException("The scene manager has not been initialized.");
@@ -155,7 +167,7 @@ public sealed class SceneManager
             EngineLog.Error($"Scene factory for '{sceneName}' failed.", exception, "Scenes");
             throw;
         }
-        var nextScene = new Scene(sceneName, logic, _runtime);
+        var nextScene = new Scene(sceneName, logic, _runtime, _context);
         var previousScene = CurrentScene;
 
         _gui?.AddLayer(nextScene.Gui);

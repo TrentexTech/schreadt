@@ -257,7 +257,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         {
             if (_finished || !ReferenceEquals(contact.Other.Owner, _player)) return;
             _finished = true;
-            if (_nextScene is not null) State.CurrentReality.Scenes.LoadScene(_nextScene);
+            if (_nextScene is not null) Context.Scenes.LoadScene(_nextScene);
             else PlatformerScreens.ShowVictory(Scene, _stars, _playerLogic.Deaths);
         };
         Scene.AddChild(portal);
@@ -339,7 +339,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
 
     private void ConfigureCamera()
     {
-        var camera = State.CurrentReality.MainCamera;
+        var camera = Context.MainCamera;
         camera.OrthographicSize = 2.4;
         camera.SetController(new FollowCameraController2D(_player)
         {

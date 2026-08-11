@@ -9,6 +9,8 @@ public abstract class GameLogic : IInitializable, IUpdateable, IFixedUpdateable,
     protected Reality Reality => _reality
         ?? throw new InvalidOperationException("Game logic has not been attached to a reality.");
 
+    protected IEngineContext Context => Reality.Context;
+
     internal void Attach(Reality reality)
     {
         ArgumentNullException.ThrowIfNull(reality);

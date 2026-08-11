@@ -15,7 +15,7 @@ public sealed class ExampleGameLogic : GameLogic
     internal const string LevelFive = "tempest-spire";
     private readonly IInputService? _inputOverride;
 
-    private IInputService Input => _inputOverride ?? State.Input;
+    private IInputService Input => _inputOverride ?? Context.Input;
 
     public ExampleGameLogic(IInputService? input = null)
     {
@@ -41,7 +41,7 @@ public sealed class ExampleGameLogic : GameLogic
         Reality.Scenes.LoadScene(LevelOne);
         Reality.MainCamera.OrthographicSize = 2.4;
 
-        var help = State.Gui.AddPanel();
+        var help = Context.Gui.AddPanel();
         help.Position = new Vector2D<float>(12, 12);
         help.Padding = 7;
         help.Spacing = 5;

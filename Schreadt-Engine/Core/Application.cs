@@ -1,4 +1,5 @@
 using Schreadt_Engine.Component.Logic;
+using Schreadt_Engine.Asset;
 using Schreadt_Engine.Gui;
 
 namespace Schreadt_Engine.Core;
@@ -14,21 +15,22 @@ internal class Application
     internal readonly Reality Reality;
     internal readonly GuiSystem Gui;
     internal readonly RuntimeController Runtime;
+    internal readonly IEngineContext Context;
 
-    internal Application(GameLogic? gameLogic)
+    internal Application(GameLogic? gameLogic, IAssetProvider assets, IEnumerable<string> launchArgs)
     {
+        ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(launchArgs);
+
         EngineLog.Debug("Constructing engine subsystems.", "Application");
         Input = new InputManager();
-        State.SetInput(Input);
         Gui = new GuiSystem(Config.Data.Window.DefaultSize.Height);
-        State.SetGui(Gui);
         _performanceOverlay = new PerformanceOverlay(Gui);
         Runtime = new RuntimeController();
-        State.SetRuntime(Runtime);
         Reality = new Reality(gameLogic, Gui, Runtime);
-        State.SetCurrentReality(Reality);
-        Window = new Window(this);
-        State.SetWindow(Window);
+        Window = new Window(this, assets);
+        Context = new EngineContext(launchArgs, Input, assets, Window, Reality, Runtime, Gui);
+        Reality.AttachContext(Context);
         EngineLog.Debug("Input, GUI, runtime, reality, and window subsystems constructed.", "Application");
     }
 

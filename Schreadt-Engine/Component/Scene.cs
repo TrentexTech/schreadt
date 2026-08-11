@@ -9,6 +9,8 @@ public class Scene : GameObject
 {
     private bool _unloaded;
 
+    internal IEngineContext? EngineContext { get; }
+
     public string Name { get; }
     public SceneLogic Logic { get; }
     public CollisionWorld2D Collisions { get; } = new();
@@ -16,10 +18,15 @@ public class Scene : GameObject
     public GuiLayer Gui { get; } = new();
     public GuiScreenStack Screens => Gui.Screens;
 
-    internal Scene(string name, SceneLogic logic, RuntimeController? runtime = null)
+    internal Scene(
+        string name,
+        SceneLogic logic,
+        RuntimeController? runtime = null,
+        IEngineContext? context = null)
     {
         Name = name;
         Logic = logic;
+        EngineContext = context;
         Logic.Attach(this);
         Screens.SetRuntime(runtime);
         AttachToScene(this);

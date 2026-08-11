@@ -9,22 +9,23 @@ internal sealed class MandelbrotGameLogic : GameLogic
 
     public override void Init()
     {
-        State.Input.SetActionBindings(MandelbrotInputActions.PanLeft,
+        var input = Context.Input;
+        input.SetActionBindings(MandelbrotInputActions.PanLeft,
             InputBinding.ForKey(InputKey.A), InputBinding.ForKey(InputKey.Left));
-        State.Input.SetActionBindings(MandelbrotInputActions.PanRight,
+        input.SetActionBindings(MandelbrotInputActions.PanRight,
             InputBinding.ForKey(InputKey.D), InputBinding.ForKey(InputKey.Right));
-        State.Input.SetActionBindings(MandelbrotInputActions.PanUp,
+        input.SetActionBindings(MandelbrotInputActions.PanUp,
             InputBinding.ForKey(InputKey.W), InputBinding.ForKey(InputKey.Up));
-        State.Input.SetActionBindings(MandelbrotInputActions.PanDown,
+        input.SetActionBindings(MandelbrotInputActions.PanDown,
             InputBinding.ForKey(InputKey.S), InputBinding.ForKey(InputKey.Down));
-        State.Input.SetActionBindings(MandelbrotInputActions.MoreIterations,
+        input.SetActionBindings(MandelbrotInputActions.MoreIterations,
             InputBinding.ForKey(InputKey.Equal), InputBinding.ForKey(InputKey.PageUp));
-        State.Input.SetActionBindings(MandelbrotInputActions.FewerIterations,
+        input.SetActionBindings(MandelbrotInputActions.FewerIterations,
             InputBinding.ForKey(InputKey.Minus), InputBinding.ForKey(InputKey.PageDown));
-        State.Input.SetActionBindings(MandelbrotInputActions.NextPalette, InputBinding.ForKey(InputKey.C));
-        State.Input.SetActionBindings(MandelbrotInputActions.Reset, InputBinding.ForKey(InputKey.R));
+        input.SetActionBindings(MandelbrotInputActions.NextPalette, InputBinding.ForKey(InputKey.C));
+        input.SetActionBindings(MandelbrotInputActions.Reset, InputBinding.ForKey(InputKey.R));
 
-        Reality.Scenes.RegisterScene(ExplorerScene, () => new MandelbrotSceneLogic(State.Input));
+        Reality.Scenes.RegisterScene(ExplorerScene, () => new MandelbrotSceneLogic(input));
         Reality.Scenes.LoadScene(ExplorerScene);
         Reality.MainCamera.OrthographicSize = 1.0;
     }

@@ -52,6 +52,10 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
 
     public Scene? Scene => _scene;
 
+    /// <summary>The services for the engine instance that owns this object's scene.</summary>
+    public IEngineContext Context => _scene?.EngineContext
+        ?? throw new InvalidOperationException("The game object does not belong to an engine context.");
+
     public IReadOnlyList<GameObject> Children => _children;
 
     public IReadOnlyList<GameComponent> Components => _components;
