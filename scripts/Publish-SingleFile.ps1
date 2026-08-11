@@ -51,6 +51,7 @@ $publishArguments = @(
     '-p:IncludeNativeLibrariesForSelfExtract=true'
     '-p:DebugType=None'
     '-p:DebugSymbols=false'
+    '-p:RestoreLockedMode=true'
     '--output'
     $resolvedOutputDirectory
 )

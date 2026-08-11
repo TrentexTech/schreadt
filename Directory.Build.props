@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <!-- Commit per-project lock files so transitive NuGet resolution is reviewable and repeatable. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
+
+    <!-- Keep ordinary restores and the supported single-file publish restores on one lock graph. -->
+    <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
+    <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
+</Project>

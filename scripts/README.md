@@ -1,4 +1,42 @@
-# Publishing the examples
+# Building and publishing
+
+## Reproducible SDK and restore
+
+Schreadt targets .NET 10 and pins the 10.0.1xx SDK feature band through the root
+`global.json`. SDK 10.0.100 or a newer servicing patch in that feature band is
+accepted; prerelease, later feature-band, and later major-version SDKs are not
+selected automatically. Confirm the selected SDK from the repository root:
+
+```powershell
+dotnet --version
+```
+
+Every project has a committed `packages.lock.json`, and the shared build settings
+enable locked mode by default. A normal restore therefore fails instead of
+silently choosing different direct or transitive package versions:
+
+```powershell
+dotnet restore Schreadt.slnx
+dotnet build Schreadt.slnx --no-restore
+dotnet test --solution Schreadt.slnx --no-restore
+```
+
+To update a dependency, change its `PackageReference`, regenerate all affected
+locks, and review the lock-file diff before committing:
+
+```powershell
+dotnet restore Schreadt.slnx --force-evaluate
+dotnet restore Schreadt.slnx
+```
+
+Do not edit `packages.lock.json` manually.
+
+The lock graph includes the supported `win-x64` and `linux-x64` single-file
+publish targets. The publishing scripts also enable locked restore when a
+runtime-specific restore is required, so publishing cannot silently change the
+dependency graph.
+
+## Publishing the examples
 
 Run these commands from the repository root in PowerShell. The scripts themselves resolve
 all project paths relative to the repository, so invoking them by absolute path also works
