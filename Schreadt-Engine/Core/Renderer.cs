@@ -141,30 +141,64 @@ public sealed class Renderer : IRenderer2D
         _assets = assets;
         _targetAspectRatio = targetAspectRatio;
 
-        _shaderProgram = CreateShaderProgram();
-        _centerUniform = _gl.GetUniformLocation(_shaderProgram, "uCenter");
-        _scaleUniform = _gl.GetUniformLocation(_shaderProgram, "uScale");
-        _colorUniform = _gl.GetUniformLocation(_shaderProgram, "uColor");
+        var initialization = new RendererInitializationScope(DeleteInitializationResource);
+        try
+        {
+            _shaderProgram = CreateShaderProgram(initialization);
+            _centerUniform = _gl.GetUniformLocation(_shaderProgram, "uCenter");
+            _scaleUniform = _gl.GetUniformLocation(_shaderProgram, "uScale");
+            _colorUniform = _gl.GetUniformLocation(_shaderProgram, "uColor");
 
-        (_circleVertexArray, _circleVertexBuffer, _circleVertexCount) = CreateCircleMesh();
-        (_lineVertexArray, _lineVertexBuffer) = CreateLineMesh();
+            (_circleVertexArray, _circleVertexBuffer, _circleVertexCount) = CreateCircleMesh(initialization);
+            (_lineVertexArray, _lineVertexBuffer) = CreateLineMesh(initialization);
 
-        _spriteShaderProgram = CreateShaderProgram(SpriteVertexShaderSource, SpriteFragmentShaderSource, "sprite");
-        _spriteCenterUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uCenter");
-        _spriteAxisXUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uAxisX");
-        _spriteAxisYUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uAxisY");
-        _spriteRegionUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uTextureRegion");
-        _spriteTintUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uTint");
-        (_spriteVertexArray, _spriteVertexBuffer) = CreateSpriteMesh();
+            _spriteShaderProgram = CreateShaderProgram(
+                SpriteVertexShaderSource,
+                SpriteFragmentShaderSource,
+                "sprite",
+                initialization);
+            _spriteCenterUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uCenter");
+            _spriteAxisXUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uAxisX");
+            _spriteAxisYUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uAxisY");
+            _spriteRegionUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uTextureRegion");
+            _spriteTintUniform = _gl.GetUniformLocation(_spriteShaderProgram, "uTint");
+            (_spriteVertexArray, _spriteVertexBuffer) = CreateSpriteMesh(initialization);
 
-        _gl.UseProgram(_spriteShaderProgram);
-        _gl.Uniform1(_gl.GetUniformLocation(_spriteShaderProgram, "uTexture"), 0);
+            _gl.UseProgram(_spriteShaderProgram);
+            _gl.Uniform1(_gl.GetUniformLocation(_spriteShaderProgram, "uTexture"), 0);
 
-        CreatePixelTexture();
+            CreatePixelTexture(initialization);
 
-        _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            initialization.Complete();
+        }
+        catch
+        {
+            foreach (var rollbackFailure in initialization.Rollback())
+            {
+                EngineLog.Error(
+                    "Could not release an OpenGL resource during renderer initialization rollback.",
+                    rollbackFailure,
+                    "Renderer");
+            }
+
+            try
+            {
+                _gl.Dispose();
+            }
+            catch (Exception disposeFailure)
+            {
+                EngineLog.Error(
+                    "Could not dispose the OpenGL API during renderer initialization rollback.",
+                    disposeFailure,
+                    "Renderer");
+            }
+
+            throw;
+        }
+
         EngineLog.Information(
             $"OpenGL renderer initialized; target aspect ratio: {_targetAspectRatio:F4}; " +
             $"asset catalog: {(_assets is null ? "none" : $"{_assets.Count} asset(s)")}.",
@@ -571,7 +605,8 @@ public sealed class Renderer : IRenderer2D
         EngineLog.Information("Renderer resources disposed.", "Renderer");
     }
 
-    private unsafe (uint VertexArray, uint VertexBuffer, int VertexCount) CreateCircleMesh()
+    private unsafe (uint VertexArray, uint VertexBuffer, int VertexCount) CreateCircleMesh(
+        RendererInitializationScope initialization)
     {
         var vertexCount = CircleSegmentCount + 2;
         var vertices = new float[vertexCount * 2];
@@ -584,8 +619,8 @@ public sealed class Renderer : IRenderer2D
             vertices[vertexIndex + 1] = (float)Math.Sin(angle);
         }
 
-        var vertexArray = _gl.GenVertexArray();
-        var vertexBuffer = _gl.GenBuffer();
+        var vertexArray = initialization.Track(RendererResourceKind.VertexArray, _gl.GenVertexArray());
+        var vertexBuffer = initialization.Track(RendererResourceKind.Buffer, _gl.GenBuffer());
 
         _gl.BindVertexArray(vertexArray);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBuffer);
@@ -608,10 +643,10 @@ public sealed class Renderer : IRenderer2D
         return (vertexArray, vertexBuffer, vertexCount);
     }
 
-    private unsafe (uint VertexArray, uint VertexBuffer) CreateLineMesh()
+    private unsafe (uint VertexArray, uint VertexBuffer) CreateLineMesh(RendererInitializationScope initialization)
     {
-        var vertexArray = _gl.GenVertexArray();
-        var vertexBuffer = _gl.GenBuffer();
+        var vertexArray = initialization.Track(RendererResourceKind.VertexArray, _gl.GenVertexArray());
+        var vertexBuffer = initialization.Track(RendererResourceKind.Buffer, _gl.GenBuffer());
         var initialVertices = new float[4];
 
         _gl.BindVertexArray(vertexArray);
@@ -635,7 +670,7 @@ public sealed class Renderer : IRenderer2D
         return (vertexArray, vertexBuffer);
     }
 
-    private unsafe (uint VertexArray, uint VertexBuffer) CreateSpriteMesh()
+    private unsafe (uint VertexArray, uint VertexBuffer) CreateSpriteMesh(RendererInitializationScope initialization)
     {
         float[] vertices =
         [
@@ -647,8 +682,8 @@ public sealed class Renderer : IRenderer2D
              1.0f,  1.0f, 1.0f, 0.0f
         ];
 
-        var vertexArray = _gl.GenVertexArray();
-        var vertexBuffer = _gl.GenBuffer();
+        var vertexArray = initialization.Track(RendererResourceKind.VertexArray, _gl.GenVertexArray());
+        var vertexBuffer = initialization.Track(RendererResourceKind.Buffer, _gl.GenBuffer());
         _gl.BindVertexArray(vertexArray);
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, vertexBuffer);
 
@@ -700,9 +735,10 @@ public sealed class Renderer : IRenderer2D
         return new Texture2D(handle, image.Id, image.Width, image.Height);
     }
 
-    private void CreatePixelTexture()
+    private void CreatePixelTexture(RendererInitializationScope? initialization = null)
     {
         _pixelTexture = _gl.GenTexture();
+        initialization?.Track(RendererResourceKind.Texture, _pixelTexture);
         _gl.BindTexture(TextureTarget.Texture2D, _pixelTexture);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
@@ -923,37 +959,45 @@ public sealed class Renderer : IRenderer2D
         return (long)(Math.Ceiling(value / (double)interval) * interval);
     }
 
-    private uint CreateShaderProgram()
+    private uint CreateShaderProgram(RendererInitializationScope initialization)
     {
-        return CreateShaderProgram(VertexShaderSource, FragmentShaderSource, "shape");
+        return CreateShaderProgram(VertexShaderSource, FragmentShaderSource, "shape", initialization);
     }
 
-    private uint CreateShaderProgram(string vertexSource, string fragmentSource, string label)
+    private uint CreateShaderProgram(
+        string vertexSource,
+        string fragmentSource,
+        string label,
+        RendererInitializationScope initialization)
     {
-        var vertexShader = CompileShader(ShaderType.VertexShader, vertexSource);
-        var fragmentShader = CompileShader(ShaderType.FragmentShader, fragmentSource);
-        var program = _gl.CreateProgram();
+        var vertexShader = CompileShader(ShaderType.VertexShader, vertexSource, initialization);
+        var fragmentShader = CompileShader(ShaderType.FragmentShader, fragmentSource, initialization);
+        var program = initialization.Track(RendererResourceKind.Program, _gl.CreateProgram());
 
         _gl.AttachShader(program, vertexShader);
         _gl.AttachShader(program, fragmentShader);
         _gl.LinkProgram(program);
         _gl.GetProgram(program, ProgramPropertyARB.LinkStatus, out var linkStatus);
 
+        if (linkStatus == 0)
+        {
+            var infoLog = _gl.GetProgramInfoLog(program);
+            throw new InvalidOperationException($"Could not link the {label} shader: {infoLog}");
+        }
+
         _gl.DetachShader(program, vertexShader);
         _gl.DetachShader(program, fragmentShader);
-        _gl.DeleteShader(vertexShader);
-        _gl.DeleteShader(fragmentShader);
-
-        if (linkStatus != 0) return program;
-
-        var infoLog = _gl.GetProgramInfoLog(program);
-        _gl.DeleteProgram(program);
-        throw new InvalidOperationException($"Could not link the {label} shader: {infoLog}");
+        initialization.Delete(RendererResourceKind.Shader, vertexShader);
+        initialization.Delete(RendererResourceKind.Shader, fragmentShader);
+        return program;
     }
 
-    private uint CompileShader(ShaderType type, string source)
+    private uint CompileShader(
+        ShaderType type,
+        string source,
+        RendererInitializationScope initialization)
     {
-        var shader = _gl.CreateShader(type);
+        var shader = initialization.Track(RendererResourceKind.Shader, _gl.CreateShader(type));
         _gl.ShaderSource(shader, source);
         _gl.CompileShader(shader);
         _gl.GetShader(shader, ShaderParameterName.CompileStatus, out var compileStatus);
@@ -961,8 +1005,31 @@ public sealed class Renderer : IRenderer2D
         if (compileStatus != 0) return shader;
 
         var infoLog = _gl.GetShaderInfoLog(shader);
-        _gl.DeleteShader(shader);
         throw new InvalidOperationException($"Could not compile the {type} shader: {infoLog}");
+    }
+
+    private void DeleteInitializationResource(RendererResourceKind kind, uint handle)
+    {
+        switch (kind)
+        {
+            case RendererResourceKind.Shader:
+                _gl.DeleteShader(handle);
+                break;
+            case RendererResourceKind.Program:
+                _gl.DeleteProgram(handle);
+                break;
+            case RendererResourceKind.Buffer:
+                _gl.DeleteBuffer(handle);
+                break;
+            case RendererResourceKind.VertexArray:
+                _gl.DeleteVertexArray(handle);
+                break;
+            case RendererResourceKind.Texture:
+                _gl.DeleteTexture(handle);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported renderer resource kind.");
+        }
     }
 
 }
