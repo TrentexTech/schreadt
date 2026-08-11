@@ -4,6 +4,8 @@ namespace Schreadt_Engine.Gui;
 
 public sealed class GuiScreen
 {
+    private bool _pausesSimulation;
+
     public GuiScreen(string name, IGuiElement root)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -18,7 +20,16 @@ public sealed class GuiScreen
 
     public bool IsModal { get; set; } = true;
 
-    public bool PausesSimulation { get; set; }
+    public bool PausesSimulation
+    {
+        get => _pausesSimulation;
+        set
+        {
+            if (_pausesSimulation == value) return;
+            _pausesSimulation = value;
+            PausesSimulationChanged?.Invoke(this);
+        }
+    }
 
     public bool DismissOnEscape { get; set; }
 
@@ -27,6 +38,8 @@ public sealed class GuiScreen
     public event Action<GuiScreen>? Opened;
 
     public event Action<GuiScreen>? Closed;
+
+    internal event Action<GuiScreen>? PausesSimulationChanged;
 
     internal void NotifyOpened()
     {
@@ -73,9 +86,12 @@ public sealed class GuiScreenStack
         try
         {
             _screens.Add(screen);
+            screen.PausesSimulationChanged += OnPausesSimulationChanged;
         }
         catch
         {
+            _screens.Remove(screen);
+            screen.PausesSimulationChanged -= OnPausesSimulationChanged;
             GuiElementOwnership.Release(screen.Root, screen);
             throw;
         }
@@ -125,6 +141,7 @@ public sealed class GuiScreenStack
             var screen = _screens[index];
             _layer.ReleaseInteraction(screen.Root);
             _screens.RemoveAt(index);
+            screen.PausesSimulationChanged -= OnPausesSimulationChanged;
             GuiElementOwnership.Release(screen.Root, screen);
             screen.NotifyClosed();
             ScreenRemoved?.Invoke(screen);
@@ -145,10 +162,16 @@ public sealed class GuiScreenStack
     {
         _layer.ReleaseInteraction(screen.Root);
         _screens.RemoveAt(index);
+        screen.PausesSimulationChanged -= OnPausesSimulationChanged;
         GuiElementOwnership.Release(screen.Root, screen);
         screen.NotifyClosed();
         ScreenRemoved?.Invoke(screen);
         UpdateSimulationPause();
+    }
+
+    private void OnPausesSimulationChanged(GuiScreen screen)
+    {
+        if (_screens.Contains(screen)) UpdateSimulationPause();
     }
 
     private void UpdateSimulationPause()

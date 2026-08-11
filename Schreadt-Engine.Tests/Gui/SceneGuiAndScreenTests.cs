@@ -82,6 +82,65 @@ public sealed class SceneGuiAndScreenTests
     }
 
     [Fact]
+    public void OpenScreen_PausesAndResumesImmediatelyWhenPauseBehaviorChanges()
+    {
+        var runtime = new RuntimeController();
+        var layer = new GuiLayer();
+        layer.Screens.SetRuntime(runtime);
+        var screen = layer.Screens.Push(new GuiScreen("pause", new GuiPanel()));
+
+        Assert.False(runtime.IsPaused);
+
+        screen.PausesSimulation = true;
+        Assert.True(runtime.IsPaused);
+
+        screen.PausesSimulation = false;
+        Assert.False(runtime.IsPaused);
+    }
+
+    [Fact]
+    public void OpenScreens_ShareOneStackOwnedPauseRequestWhenPauseBehaviorChanges()
+    {
+        var runtime = new RuntimeController();
+        var firstLayer = new GuiLayer();
+        var secondLayer = new GuiLayer();
+        firstLayer.Screens.SetRuntime(runtime);
+        secondLayer.Screens.SetRuntime(runtime);
+        var first = firstLayer.Screens.Push(new GuiScreen("first", new GuiPanel()));
+        var second = firstLayer.Screens.Push(new GuiScreen("second", new GuiPanel()));
+        var independent = secondLayer.Screens.Push(
+            new GuiScreen("independent", new GuiPanel()) { PausesSimulation = true });
+
+        first.PausesSimulation = true;
+        second.PausesSimulation = true;
+        first.PausesSimulation = false;
+        Assert.True(runtime.IsPaused);
+
+        second.PausesSimulation = false;
+        Assert.True(runtime.IsPaused);
+
+        independent.PausesSimulation = false;
+        Assert.False(runtime.IsPaused);
+    }
+
+    [Fact]
+    public void ClosedScreen_NoLongerChangesSimulationPauseState()
+    {
+        var runtime = new RuntimeController();
+        var layer = new GuiLayer();
+        layer.Screens.SetRuntime(runtime);
+        var screen = layer.Screens.Push(
+            new GuiScreen("pause", new GuiPanel()) { PausesSimulation = true });
+
+        layer.Screens.Pop();
+        Assert.False(runtime.IsPaused);
+
+        screen.PausesSimulation = false;
+        screen.PausesSimulation = true;
+        Assert.False(runtime.IsPaused);
+    }
+
+    [Fact]
     public void ModalScreen_BlocksControlsBelowIt()
     {
         using var input = new InputManager();
