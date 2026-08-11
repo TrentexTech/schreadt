@@ -14,7 +14,26 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     private readonly List<GameObject> _children = [];
     private readonly List<GameComponent> _components = [];
 
+    /// <summary>
+    /// Whether this object is locally active. An inactive object also suppresses its descendants.
+    /// </summary>
     public bool Active { get; set; } = true;
+
+    /// <summary>
+    /// Whether this object and every object above it in the hierarchy are active.
+    /// </summary>
+    public bool ActiveInHierarchy
+    {
+        get
+        {
+            for (GameObject? current = this; current is not null; current = current._parent)
+            {
+                if (!current.Active) return false;
+            }
+
+            return true;
+        }
+    }
 
     /// <summary>
     /// Broad rendering group. Lower layers are drawn first and therefore appear behind higher layers.
@@ -65,7 +84,7 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     public void Update(double dt)
     {
         EnsureInitialized();
-        if (!Active) return;
+        if (!ActiveInHierarchy) return;
 
         OnUpdate(dt);
 
@@ -83,7 +102,7 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     public void FixedUpdate(double dt)
     {
         EnsureInitialized();
-        if (!Active) return;
+        if (!ActiveInHierarchy) return;
 
         OnFixedUpdate(dt);
 
@@ -122,7 +141,7 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     {
         ArgumentNullException.ThrowIfNull(renderer);
         EnsureInitialized();
-        if (!Active) return;
+        if (!ActiveInHierarchy) return;
 
         var renderEntries = new List<RenderEntry>();
         long sequence = 0;
@@ -269,7 +288,7 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
 
     private void CollectRenderEntries(List<RenderEntry> entries, ref long sequence)
     {
-        if (!Active) return;
+        if (!ActiveInHierarchy) return;
 
         entries.Add(new RenderEntry(this, sequence++));
         foreach (var child in _children.ToArray())
@@ -280,9 +299,11 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
 
     private bool CanRenderWithin(GameObject renderRoot)
     {
+        if (!ActiveInHierarchy) return false;
+
         for (GameObject? current = this; current is not null; current = current.Parent)
         {
-            if (!current._initialized || !current.Active) return false;
+            if (!current._initialized) return false;
             if (ReferenceEquals(current, renderRoot)) return true;
         }
 

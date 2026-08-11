@@ -389,7 +389,7 @@ public sealed class CollisionWorld2D
 
     private bool CanCollide(Collider2D collider)
     {
-        return ReferenceEquals(collider.World, this) && collider.Enabled && collider.Owner.Active;
+        return ReferenceEquals(collider.World, this) && collider.Enabled && collider.Owner.ActiveInHierarchy;
     }
 
     private bool CanQuery(Collider2D collider, CollisionQueryFilter2D filter)

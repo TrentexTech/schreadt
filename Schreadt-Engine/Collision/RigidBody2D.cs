@@ -227,7 +227,7 @@ public sealed class RigidBody2D : GameComponent
 
     internal void Integrate(Vector2D<double> gravity, double dt)
     {
-        if (BodyType == CollisionBodyType2D.Static || !Owner.Active)
+        if (BodyType == CollisionBodyType2D.Static || !Owner.ActiveInHierarchy)
         {
             ClearForces();
             return;
@@ -284,7 +284,7 @@ public sealed class RigidBody2D : GameComponent
 
     internal void EndPhysicsStep(double dt)
     {
-        if (BodyType != CollisionBodyType2D.Dynamic || !AllowSleep || !Owner.Active)
+        if (BodyType != CollisionBodyType2D.Dynamic || !AllowSleep || !Owner.ActiveInHierarchy)
         {
             IsSleeping = false;
             _sleepTimer = 0.0;

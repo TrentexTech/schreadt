@@ -62,7 +62,7 @@ public sealed class CollisionDebugDraw2D
             var collider = colliders[index];
             if (!collider.Attached) continue;
 
-            var active = collider.Enabled && collider.Owner.Active;
+            var active = collider.Enabled && collider.Owner.ActiveInHierarchy;
             if (!active && !ShowDisabled) continue;
 
             var color = active ? GetColor(collider) : DisabledColor;
