@@ -6,10 +6,9 @@ using Silk.NET.OpenGL;
 
 namespace Schreadt_Engine.Core;
 
-public sealed class Renderer : IRenderer2D
+public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
 {
     private const int CircleSegmentCount = 96;
-    private const int MaximumGridLineCount = 2048;
     private static readonly Vector4D<float> SceneClearColor = new(0.055f, 0.065f, 0.09f, 1.0f);
     private static readonly Vector2D<double>[] RectangleVertices =
     [
@@ -128,6 +127,21 @@ public sealed class Renderer : IRenderer2D
 
     public Vector2D<int> ViewportSize => new(_viewportWidth, _viewportHeight);
 
+    public BackgroundView2D View
+    {
+        get
+        {
+            var (minimum, maximum) = _cameraView.GetVisibleBounds();
+            return new BackgroundView2D(
+                _cameraView.Position,
+                _cameraView.RotationRadians,
+                _cameraView.OrthographicSize,
+                _cameraView.AspectRatio,
+                minimum,
+                maximum);
+        }
+    }
+
     public RenderStatistics Statistics { get; private set; }
 
     public Renderer(GL gl, IAssetProvider? assets = null, double targetAspectRatio = 16.0 / 9.0)
@@ -211,7 +225,9 @@ public sealed class Renderer : IRenderer2D
         ArgumentNullException.ThrowIfNull(camera);
         ArgumentNullException.ThrowIfNull(obj);
 
-        _cameraView = camera.CreateView((double)_viewportWidth / _viewportHeight);
+        var aspectRatio = (double)_viewportWidth / _viewportHeight;
+        var sceneView = camera.CreateView(aspectRatio);
+        _cameraView = sceneView;
         _frameDrawCallCount = 0;
         _framePrimitiveCount = 0;
         _frameVertexCount = 0;
@@ -223,7 +239,18 @@ public sealed class Renderer : IRenderer2D
         {
             _gl.Clear(ClearBufferMask.ColorBufferBit);
             DrawScreenRectangle(Vector2D<float>.Zero, new Vector2D<float>(_viewportWidth, _viewportHeight), SceneClearColor);
-            if (obj is Scene { Background.Enabled: true } scene) DrawGrid(scene.Background);
+            if (obj is Scene { Background: { Enabled: true } background })
+            {
+                _cameraView = camera.CreateBackgroundView(aspectRatio, background);
+                try
+                {
+                    background.Render(this);
+                }
+                finally
+                {
+                    _cameraView = sceneView;
+                }
+            }
             obj.Render(this);
             if (obj is Scene debugScene) debugScene.Collisions.DrawDiagnostics(this);
             gui?.Render(this);
@@ -309,6 +336,28 @@ public sealed class Renderer : IRenderer2D
         _gl.BindVertexArray(_circleVertexArray);
         DrawArrays(PrimitiveType.TriangleFan, _circleVertexCount);
         _gl.BindVertexArray(0);
+    }
+
+    public void DrawLines(IReadOnlyList<LineSegment2D> lines, Vector4D<float> color)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(lines);
+        if (!_renderingFrame) throw new InvalidOperationException("Draw calls must occur while a camera is rendering a frame.");
+
+        var vertices = new List<float>(checked(lines.Count * 4));
+        for (var index = 0; index < lines.Count; index++)
+        {
+            var line = lines[index];
+            if (!double.IsFinite(line.Start.X) || !double.IsFinite(line.Start.Y) ||
+                !double.IsFinite(line.End.X) || !double.IsFinite(line.End.Y))
+            {
+                throw new ArgumentOutOfRangeException(nameof(lines), "Line endpoints must be finite.");
+            }
+
+            AddLine(vertices, line.Start, line.End);
+        }
+
+        DrawLineBatch(vertices, color);
     }
 
     public void DrawRectangle(
@@ -803,57 +852,7 @@ public sealed class Renderer : IRenderer2D
         _pixelTextureSampling = sampling;
     }
 
-    private void DrawGrid(GridBackground2D grid)
-    {
-        var corners = new[]
-        {
-            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(-1.0, -1.0)),
-            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(-1.0, 1.0)),
-            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(1.0, -1.0)),
-            _cameraView.NormalizedDeviceToWorldPoint(new Vector2D<double>(1.0, 1.0))
-        };
-        var minimumX = corners.Min(point => point.X);
-        var maximumX = corners.Max(point => point.X);
-        var minimumY = corners.Min(point => point.Y);
-        var maximumY = corners.Max(point => point.Y);
-        var estimatedLineCount = (maximumX - minimumX + maximumY - minimumY) / grid.CellSize + 4.0;
-        var indexStride = Math.Max(1L, (long)Math.Ceiling(estimatedLineCount / MaximumGridLineCount));
-        var minimumXIndex = (long)Math.Floor(minimumX / grid.CellSize);
-        var maximumXIndex = (long)Math.Ceiling(maximumX / grid.CellSize);
-        var minimumYIndex = (long)Math.Floor(minimumY / grid.CellSize);
-        var maximumYIndex = (long)Math.Ceiling(maximumY / grid.CellSize);
-        var minorVertices = new List<float>();
-        var majorVertices = new List<float>();
-        var axisVertices = new List<float>();
-
-        for (var index = FirstMultipleAtOrAbove(minimumXIndex, indexStride);
-             index <= maximumXIndex;
-             index += indexStride)
-        {
-            var x = index * grid.CellSize;
-            AddGridLine(
-                SelectGridBatch(index, grid.MajorLineEvery, minorVertices, majorVertices, axisVertices),
-                new Vector2D<double>(x, minimumY),
-                new Vector2D<double>(x, maximumY));
-        }
-
-        for (var index = FirstMultipleAtOrAbove(minimumYIndex, indexStride);
-             index <= maximumYIndex;
-             index += indexStride)
-        {
-            var y = index * grid.CellSize;
-            AddGridLine(
-                SelectGridBatch(index, grid.MajorLineEvery, minorVertices, majorVertices, axisVertices),
-                new Vector2D<double>(minimumX, y),
-                new Vector2D<double>(maximumX, y));
-        }
-
-        DrawLineBatch(minorVertices, grid.MinorLineColor);
-        DrawLineBatch(majorVertices, grid.MajorLineColor);
-        DrawLineBatch(axisVertices, grid.OriginAxisColor);
-    }
-
-    private void AddGridLine(List<float> vertices, Vector2D<double> start, Vector2D<double> end)
+    private void AddLine(List<float> vertices, Vector2D<double> start, Vector2D<double> end)
     {
         var projectedStart = _cameraView.WorldToNormalizedDevicePoint(start);
         var projectedEnd = _cameraView.WorldToNormalizedDevicePoint(end);
@@ -941,22 +940,6 @@ public sealed class Renderer : IRenderer2D
             PrimitiveType.Lines => vertexCount / 2,
             _ => 0
         };
-    }
-
-    private static List<float> SelectGridBatch(
-        long lineIndex,
-        int majorLineEvery,
-        List<float> minorVertices,
-        List<float> majorVertices,
-        List<float> axisVertices)
-    {
-        if (lineIndex == 0) return axisVertices;
-        return lineIndex % majorLineEvery == 0 ? majorVertices : minorVertices;
-    }
-
-    private static long FirstMultipleAtOrAbove(long value, long interval)
-    {
-        return (long)(Math.Ceiling(value / (double)interval) * interval);
     }
 
     private uint CreateShaderProgram(RendererInitializationScope initialization)

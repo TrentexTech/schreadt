@@ -89,6 +89,30 @@ public class Camera : GameObject
         return new CameraView(RenderPosition, OrthographicSize, aspectRatio, RenderRotationRadians);
     }
 
+    internal CameraView CreateBackgroundView(double aspectRatio, IBackground2D background)
+    {
+        ArgumentNullException.ThrowIfNull(background);
+
+        var factor = background.ParallaxFactor;
+        if (!double.IsFinite(factor) || factor < 0.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(background),
+                "Background parallax factors must be finite and non-negative.");
+
+        var origin = background.ParallaxOrigin;
+        if (!double.IsFinite(origin.X) || !double.IsFinite(origin.Y))
+            throw new ArgumentOutOfRangeException(
+                nameof(background),
+                "Background parallax origins must be finite.");
+
+        if (!double.IsFinite(aspectRatio) || aspectRatio <= 0)
+            throw new ArgumentOutOfRangeException(nameof(aspectRatio), "Aspect ratio must be finite and greater than zero.");
+
+        ViewportAspectRatio = aspectRatio;
+        var position = origin + ((RenderPosition - origin) * factor);
+        return new CameraView(position, OrthographicSize, aspectRatio, RenderRotationRadians);
+    }
+
     internal void SetEffectOffset(Vector2D<double> positionOffset, double rotationOffset)
     {
         if (!double.IsFinite(positionOffset.X) || !double.IsFinite(positionOffset.Y))
@@ -139,6 +163,29 @@ internal readonly struct CameraView
         _halfHeight = orthographicSize;
         _cosRotation = Math.Cos(rotationRadians);
         _sinRotation = Math.Sin(rotationRadians);
+    }
+
+    internal Vector2D<double> Position => _position;
+
+    internal double RotationRadians => Math.Atan2(_sinRotation, _cosRotation);
+
+    internal double OrthographicSize => _halfHeight;
+
+    internal double AspectRatio => _halfWidth / _halfHeight;
+
+    internal (Vector2D<double> Minimum, Vector2D<double> Maximum) GetVisibleBounds()
+    {
+        var bottomLeft = NormalizedDeviceToWorldPoint(new Vector2D<double>(-1.0, -1.0));
+        var topLeft = NormalizedDeviceToWorldPoint(new Vector2D<double>(-1.0, 1.0));
+        var bottomRight = NormalizedDeviceToWorldPoint(new Vector2D<double>(1.0, -1.0));
+        var topRight = NormalizedDeviceToWorldPoint(new Vector2D<double>(1.0, 1.0));
+        return (
+            new Vector2D<double>(
+                Math.Min(Math.Min(bottomLeft.X, topLeft.X), Math.Min(bottomRight.X, topRight.X)),
+                Math.Min(Math.Min(bottomLeft.Y, topLeft.Y), Math.Min(bottomRight.Y, topRight.Y))),
+            new Vector2D<double>(
+                Math.Max(Math.Max(bottomLeft.X, topLeft.X), Math.Max(bottomRight.X, topRight.X)),
+                Math.Max(Math.Max(bottomLeft.Y, topLeft.Y), Math.Max(bottomRight.Y, topRight.Y))));
     }
 
     internal Vector2D<double> WorldToNormalizedDevicePoint(Vector2D<double> worldPosition)

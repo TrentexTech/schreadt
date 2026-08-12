@@ -36,9 +36,8 @@ internal abstract class PlatformerLevelLogic : SceneLogic
 
     public override void Init()
     {
-        Scene.Background = null;
+        Scene.Background = new LevelBackground(_number);
         Scene.Collisions.Gravity = Gravity;
-        Scene.AddChild(new LevelBackdrop(_number));
 
         _playerBehavior = new PlatformerPlayerBehavior(_input, SpawnPoint);
         _playerBehavior.StatsChanged += UpdateStats;
@@ -352,17 +351,22 @@ internal abstract class PlatformerLevelLogic : SceneLogic
     }
 }
 
-internal sealed class LevelBackdrop : GameObject
+internal sealed class LevelBackground : IBackground2D
 {
     private readonly int _level;
 
-    internal LevelBackdrop(int level)
+    internal LevelBackground(int level)
     {
         _level = level;
-        RenderLayer = -100;
     }
 
-    protected override void OnRender(IRenderContext2D renderer)
+    public bool Enabled { get; set; } = true;
+
+    public double ParallaxFactor => 0.28;
+
+    public Vector2D<double> ParallaxOrigin => Vector2D<double>.Zero;
+
+    public void Render(IBackgroundRenderContext2D renderer)
     {
         var sky = _level switch
         {

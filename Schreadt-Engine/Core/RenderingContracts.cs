@@ -12,6 +12,18 @@ public readonly record struct RenderStatistics(
     int TextureUploadCount = 0,
     long TextureUploadByteCount = 0);
 
+/// <summary>A world-space line segment used by batched background drawing.</summary>
+public readonly record struct LineSegment2D(Vector2D<double> Start, Vector2D<double> End);
+
+/// <summary>Describes the parallax-adjusted camera view used to draw a background.</summary>
+public readonly record struct BackgroundView2D(
+    Vector2D<double> Center,
+    double RotationRadians,
+    double OrthographicSize,
+    double AspectRatio,
+    Vector2D<double> VisibleMinimum,
+    Vector2D<double> VisibleMaximum);
+
 /// <summary>
 /// Receives backend-independent two-dimensional draw commands.
 /// </summary>
@@ -55,6 +67,17 @@ public interface IRenderContext2D
         Vector2D<float> position,
         Vector2D<float> size,
         Vector4D<float> color);
+}
+
+/// <summary>
+/// Supplies world drawing operations and the active view to scene backgrounds.
+/// </summary>
+public interface IBackgroundRenderContext2D : IRenderContext2D
+{
+    BackgroundView2D View { get; }
+
+    /// <summary>Draws equally colored line segments in one batch.</summary>
+    void DrawLines(IReadOnlyList<LineSegment2D> lines, Vector4D<float> color);
 }
 
 /// <summary>
