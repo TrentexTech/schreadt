@@ -101,9 +101,51 @@ public sealed class BackgroundTests
     }
 
     [Fact]
-    public void ExampleLevelBackground_UsesBackgroundContractAndParallax()
+    public void LayeredBackground_ManagesAndRendersEnabledLayersInOrder()
     {
-        IBackground2D background = new LevelBackground(1);
+        var first = new RecordingBackground { ParallaxFactor = 0.1 };
+        var disabled = new RecordingBackground { Enabled = false, ParallaxFactor = 0.2 };
+        var last = new RecordingBackground { ParallaxFactor = 0.3 };
+        var background = new LayeredBackground2D { first, last };
+        background.Insert(1, disabled);
+        var context = new RecordingBackgroundRenderContext(new BackgroundView2D(
+            Vector2D<double>.Zero,
+            0.0,
+            1.0,
+            1.0,
+            new Vector2D<double>(-1.0, -1.0),
+            new Vector2D<double>(1.0, 1.0)));
+
+        background.Render(context);
+
+        Assert.Equal(3, background.Count);
+        Assert.Same(disabled, background[1]);
+        Assert.Equal([first, last], context.RenderedBackgrounds);
+        Assert.True(background.Remove(disabled));
+        Assert.Equal([first, last], background.Layers);
+        background.Clear();
+        Assert.Empty(background.Layers);
+    }
+
+    [Fact]
+    public void LayeredBackground_RejectsDuplicatesAndHierarchyCycles()
+    {
+        var outer = new LayeredBackground2D();
+        var inner = new LayeredBackground2D();
+        var layer = new RecordingBackground();
+
+        outer.Add(layer);
+        Assert.Throws<InvalidOperationException>(() => outer.Add(layer));
+        Assert.Throws<InvalidOperationException>(() => outer.Add(outer));
+
+        outer.Add(inner);
+        Assert.Throws<InvalidOperationException>(() => inner.Add(outer));
+    }
+
+    [Fact]
+    public void ExampleLevelBackground_UsesMultipleParallaxLayers()
+    {
+        var background = LevelBackground.Create(1);
         var context = new RecordingBackgroundRenderContext(new BackgroundView2D(
             Vector2D<double>.Zero,
             0.0,
@@ -114,7 +156,17 @@ public sealed class BackgroundTests
 
         background.Render(context);
 
-        Assert.InRange(background.ParallaxFactor, 0.0, 0.999999);
+        Assert.Equal(5, background.Count);
+        Assert.Equal([0.0, 0.06, 0.16, 0.34, 0.52],
+            background.Layers.Select(layer => layer.ParallaxFactor));
+        var camera = new Camera { Position = new Vector2D<double>(10.0, 0.0) };
+        var layerCenters = background.Layers
+            .Select(layer => camera.CreateBackgroundView(1.0, layer).Position.X)
+            .ToArray();
+        var expectedCenters = new[] { 0.0, 0.6, 1.6, 3.4, 5.2 };
+        for (var index = 0; index < expectedCenters.Length; index++)
+            Assert.Equal(expectedCenters[index], layerCenters[index], 10);
+        Assert.Equal(background.Layers, context.RenderedBackgrounds);
         Assert.True(context.CircleCount > 0);
         Assert.True(context.RectangleCount > 0);
     }
@@ -145,8 +197,16 @@ public sealed class BackgroundTests
         public Vector2D<int> ViewportSize => new(1280, 720);
         public BackgroundView2D View { get; } = view;
         public List<(IReadOnlyList<LineSegment2D> Lines, Vector4D<float> Color)> LineBatches { get; } = [];
+        public List<IBackground2D> RenderedBackgrounds { get; } = [];
         public int CircleCount { get; private set; }
         public int RectangleCount { get; private set; }
+
+        public void RenderBackground(IBackground2D background)
+        {
+            if (!background.Enabled) return;
+            RenderedBackgrounds.Add(background);
+            background.Render(this);
+        }
 
         public void DrawLines(IReadOnlyList<LineSegment2D> lines, Vector4D<float> color) =>
             LineBatches.Add((lines.ToArray(), color));

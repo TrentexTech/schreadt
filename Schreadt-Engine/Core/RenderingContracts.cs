@@ -76,6 +76,12 @@ public interface IBackgroundRenderContext2D : IRenderContext2D
 {
     BackgroundView2D View { get; }
 
+    /// <summary>
+    /// Renders a child background with its own parallax-adjusted camera view.
+    /// This enables renderer-independent composite background implementations.
+    /// </summary>
+    void RenderBackground(IBackground2D background);
+
     /// <summary>Draws equally colored line segments in one batch.</summary>
     void DrawLines(IReadOnlyList<LineSegment2D> lines, Vector4D<float> color);
 }

@@ -36,7 +36,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
 
     public override void Init()
     {
-        Scene.Background = new LevelBackground(_number);
+        Scene.Background = LevelBackground.Create(_number);
         Scene.Collisions.Gravity = Gravity;
 
         _playerBehavior = new PlatformerPlayerBehavior(_input, SpawnPoint);
@@ -351,70 +351,74 @@ internal abstract class PlatformerLevelLogic : SceneLogic
     }
 }
 
-internal sealed class LevelBackground : IBackground2D
+internal static class LevelBackground
 {
-    private readonly int _level;
-
-    internal LevelBackground(int level)
+    internal static LayeredBackground2D Create(int level)
     {
-        _level = level;
+        var palette = LevelBackgroundPalette.For(level);
+        return new LayeredBackground2D
+        {
+            new SkyBackgroundLayer(palette.Sky),
+            new CelestialBackgroundLayer(palette.Celestial),
+            new HillBackgroundLayer(palette.FarHill, parallaxFactor: 0.16, xOffset: 0.0, y: -1.45, radius: 2.0),
+            new CloudBackgroundLayer(palette.Cloud),
+            new HillBackgroundLayer(palette.NearHill, parallaxFactor: 0.52, xOffset: 1.4, y: -2.05, radius: 1.75)
+        };
     }
+}
 
+internal abstract class LevelBackgroundLayer(double parallaxFactor) : IBackground2D
+{
     public bool Enabled { get; set; } = true;
 
-    public double ParallaxFactor => 0.28;
+    public double ParallaxFactor { get; } = parallaxFactor;
 
     public Vector2D<double> ParallaxOrigin => Vector2D<double>.Zero;
 
-    public void Render(IBackgroundRenderContext2D renderer)
+    public abstract void Render(IBackgroundRenderContext2D renderer);
+}
+
+internal sealed class SkyBackgroundLayer(Vector4D<float> color) : LevelBackgroundLayer(0.0)
+{
+    public override void Render(IBackgroundRenderContext2D renderer)
     {
-        var sky = _level switch
-        {
-            1 => new Vector4D<float>(0.32f, 0.72f, 0.91f, 1f),
-            2 => new Vector4D<float>(0.09f, 0.1f, 0.28f, 1f),
-            3 => new Vector4D<float>(0.21f, 0.12f, 0.39f, 1f),
-            5 => new Vector4D<float>(0.035f, 0.18f, 0.25f, 1f),
-            _ => new Vector4D<float>(0.24f, 0.09f, 0.08f, 1f)
-        };
-        var farHill = _level switch
-        {
-            1 => new Vector4D<float>(0.19f, 0.52f, 0.48f, 1f),
-            2 => new Vector4D<float>(0.21f, 0.19f, 0.46f, 1f),
-            3 => new Vector4D<float>(0.31f, 0.2f, 0.5f, 1f),
-            5 => new Vector4D<float>(0.08f, 0.4f, 0.46f, 1f),
-            _ => new Vector4D<float>(0.38f, 0.18f, 0.14f, 1f)
-        };
-        var nearHill = _level switch
-        {
-            1 => new Vector4D<float>(0.14f, 0.38f, 0.37f, 1f),
-            2 => new Vector4D<float>(0.14f, 0.15f, 0.36f, 1f),
-            3 => new Vector4D<float>(0.18f, 0.13f, 0.36f, 1f),
-            5 => new Vector4D<float>(0.04f, 0.24f, 0.31f, 1f),
-            _ => new Vector4D<float>(0.2f, 0.12f, 0.13f, 1f)
-        };
+        var bounds = renderer.View;
+        renderer.DrawRectangle(
+            (bounds.VisibleMinimum + bounds.VisibleMaximum) * 0.5,
+            bounds.VisibleMaximum - bounds.VisibleMinimum + new Vector2D<double>(0.2, 0.2),
+            color);
+    }
+}
 
-        renderer.DrawRectangle(new Vector2D<double>(8, 0), new Vector2D<double>(24, 9), sky);
-        renderer.DrawCircle(new Vector2D<double>(1.2, 2.1), 0.55, _level switch
-        {
-            1 => new Vector4D<float>(1f, 0.86f, 0.3f, 1f),
-            3 => new Vector4D<float>(0.92f, 0.75f, 1f, 0.95f),
-            4 => new Vector4D<float>(1f, 0.4f, 0.18f, 0.9f),
-            5 => new Vector4D<float>(0.55f, 1f, 0.94f, 0.9f),
-            _ => new Vector4D<float>(0.74f, 0.8f, 1f, 0.9f)
-        });
+internal sealed class CelestialBackgroundLayer(Vector4D<float> color) : LevelBackgroundLayer(0.06)
+{
+    public override void Render(IBackgroundRenderContext2D renderer)
+    {
+        renderer.DrawCircle(new Vector2D<double>(1.2, 2.1), 0.55, color);
+    }
+}
 
-        for (var x = -1.0; x < 19; x += 3.0)
-        {
-            renderer.DrawCircle(new Vector2D<double>(x, -1.45), 2.0, farHill);
-            renderer.DrawCircle(new Vector2D<double>(x + 1.4, -2.05), 1.75, nearHill);
-        }
+internal sealed class HillBackgroundLayer(
+    Vector4D<float> color,
+    double parallaxFactor,
+    double xOffset,
+    double y,
+    double radius) : LevelBackgroundLayer(parallaxFactor)
+{
+    public override void Render(IBackgroundRenderContext2D renderer)
+    {
+        for (var x = -1.0; x < 19.0; x += 3.0)
+            renderer.DrawCircle(new Vector2D<double>(x + xOffset, y), radius, color);
+    }
+}
 
-        var cloud = _level == 1
-            ? new Vector4D<float>(0.9f, 0.97f, 1f, 0.82f)
-            : new Vector4D<float>(0.45f, 0.55f, 0.88f, 0.34f);
-        DrawCloud(renderer, new Vector2D<double>(3.2, 2.05), cloud);
-        DrawCloud(renderer, new Vector2D<double>(9.4, 2.5), cloud);
-        DrawCloud(renderer, new Vector2D<double>(15.1, 1.85), cloud);
+internal sealed class CloudBackgroundLayer(Vector4D<float> color) : LevelBackgroundLayer(0.34)
+{
+    public override void Render(IBackgroundRenderContext2D renderer)
+    {
+        DrawCloud(renderer, new Vector2D<double>(3.2, 2.05), color);
+        DrawCloud(renderer, new Vector2D<double>(9.4, 2.5), color);
+        DrawCloud(renderer, new Vector2D<double>(15.1, 1.85), color);
     }
 
     private static void DrawCloud(IRenderContext2D renderer, Vector2D<double> center, Vector4D<float> color)
@@ -423,5 +427,53 @@ internal sealed class LevelBackground : IBackground2D
         renderer.DrawCircle(center + new Vector2D<double>(0.02, 0.09), 0.36, color);
         renderer.DrawCircle(center + new Vector2D<double>(0.33, 0), 0.25, color);
         renderer.DrawRectangle(center + new Vector2D<double>(0.03, -0.09), new Vector2D<double>(0.72, 0.28), color);
+    }
+}
+
+internal readonly record struct LevelBackgroundPalette(
+    Vector4D<float> Sky,
+    Vector4D<float> Celestial,
+    Vector4D<float> FarHill,
+    Vector4D<float> NearHill,
+    Vector4D<float> Cloud)
+{
+    internal static LevelBackgroundPalette For(int level)
+    {
+        var sky = level switch
+        {
+            1 => new Vector4D<float>(0.32f, 0.72f, 0.91f, 1f),
+            2 => new Vector4D<float>(0.09f, 0.1f, 0.28f, 1f),
+            3 => new Vector4D<float>(0.21f, 0.12f, 0.39f, 1f),
+            5 => new Vector4D<float>(0.035f, 0.18f, 0.25f, 1f),
+            _ => new Vector4D<float>(0.24f, 0.09f, 0.08f, 1f)
+        };
+        var celestial = level switch
+        {
+            1 => new Vector4D<float>(1f, 0.86f, 0.3f, 1f),
+            3 => new Vector4D<float>(0.92f, 0.75f, 1f, 0.95f),
+            4 => new Vector4D<float>(1f, 0.4f, 0.18f, 0.9f),
+            5 => new Vector4D<float>(0.55f, 1f, 0.94f, 0.9f),
+            _ => new Vector4D<float>(0.74f, 0.8f, 1f, 0.9f)
+        };
+        var farHill = level switch
+        {
+            1 => new Vector4D<float>(0.19f, 0.52f, 0.48f, 1f),
+            2 => new Vector4D<float>(0.21f, 0.19f, 0.46f, 1f),
+            3 => new Vector4D<float>(0.31f, 0.2f, 0.5f, 1f),
+            5 => new Vector4D<float>(0.08f, 0.4f, 0.46f, 1f),
+            _ => new Vector4D<float>(0.38f, 0.18f, 0.14f, 1f)
+        };
+        var nearHill = level switch
+        {
+            1 => new Vector4D<float>(0.14f, 0.38f, 0.37f, 1f),
+            2 => new Vector4D<float>(0.14f, 0.15f, 0.36f, 1f),
+            3 => new Vector4D<float>(0.18f, 0.13f, 0.36f, 1f),
+            5 => new Vector4D<float>(0.04f, 0.24f, 0.31f, 1f),
+            _ => new Vector4D<float>(0.2f, 0.12f, 0.13f, 1f)
+        };
+        var cloud = level == 1
+            ? new Vector4D<float>(0.9f, 0.97f, 1f, 0.82f)
+            : new Vector4D<float>(0.45f, 0.55f, 0.88f, 0.34f);
+        return new LevelBackgroundPalette(sky, celestial, farHill, nearHill, cloud);
     }
 }

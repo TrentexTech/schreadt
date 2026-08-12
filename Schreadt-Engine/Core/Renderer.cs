@@ -122,6 +122,9 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
     private int _frameVertexCount;
     private int _frameTextureUploadCount;
     private long _frameTextureUploadByteCount;
+    private readonly HashSet<IBackground2D> _activeBackgrounds = new(ReferenceEqualityComparer.Instance);
+    private Camera? _backgroundCamera;
+    private double _backgroundAspectRatio;
 
     public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
@@ -241,13 +244,17 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
             DrawScreenRectangle(Vector2D<float>.Zero, new Vector2D<float>(_viewportWidth, _viewportHeight), SceneClearColor);
             if (obj is Scene { Background: { Enabled: true } background })
             {
-                _cameraView = camera.CreateBackgroundView(aspectRatio, background);
+                _backgroundCamera = camera;
+                _backgroundAspectRatio = aspectRatio;
                 try
                 {
-                    background.Render(this);
+                    RenderBackground(background);
                 }
                 finally
                 {
+                    _activeBackgrounds.Clear();
+                    _backgroundCamera = null;
+                    _backgroundAspectRatio = 0.0;
                     _cameraView = sceneView;
                 }
             }
@@ -358,6 +365,29 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
         }
 
         DrawLineBatch(vertices, color);
+    }
+
+    public void RenderBackground(IBackground2D background)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(background);
+        if (!_renderingFrame || _backgroundCamera is null)
+            throw new InvalidOperationException("Child backgrounds can only be rendered while rendering a scene background.");
+        if (!background.Enabled) return;
+        if (!_activeBackgrounds.Add(background))
+            throw new InvalidOperationException("A cycle was detected while rendering layered backgrounds.");
+
+        var previousView = _cameraView;
+        try
+        {
+            _cameraView = _backgroundCamera.CreateBackgroundView(_backgroundAspectRatio, background);
+            background.Render(this);
+        }
+        finally
+        {
+            _cameraView = previousView;
+            _activeBackgrounds.Remove(background);
+        }
     }
 
     public void DrawRectangle(
