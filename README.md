@@ -53,7 +53,8 @@ must remain beside a published application at runtime.
 
 ## Publish
 
-Create self-contained, single-file Windows x64 builds of both examples:
+Create self-contained, single-file builds of both examples for the current host
+(`win-x64` on Windows or `linux-x64` on Linux):
 
 ```powershell
 ./scripts/Publish-AllExamples.ps1
@@ -64,6 +65,15 @@ support `linux-x64`, framework-dependent output, custom output directories, and
 individual application publishing. See [scripts/README.md](scripts/README.md)
 for the complete command reference and the intentional dependency-update
 workflow.
+
+Remove local published and packaged output while preserving its logs centrally:
+
+```powershell
+./scripts/Clear-LocalArtifacts.ps1
+```
+
+Preserved logs are stored below `artifacts/logs/archives` with a manifest for
+each cleanup.
 
 The GitHub Actions workflow builds, tests, publishes, and uploads packaged
 example applications for Windows x64 and Linux x64. Successful workflow runs

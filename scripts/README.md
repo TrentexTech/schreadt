@@ -48,9 +48,10 @@ from another directory:
 .\scripts\Publish-AllExamples.ps1
 ```
 
-By default, the scripts create self-contained Windows x64 single-file applications under
-`artifacts\publish\<application>\win-x64`. Keep each generated `config` and `assets`
-directory beside its executable.
+By default, the scripts create self-contained single-file applications for the current
+host: `win-x64` on Windows and `linux-x64` on Linux. Output is written under
+`artifacts\publish\<application>\<runtime>`. Keep each generated `config` and `assets`
+directory beside its executable. Use `-Runtime` to override the host default.
 
 Common options:
 
@@ -70,3 +71,17 @@ Common options:
 
 The scripts intentionally do not enable assembly trimming because asset library types are
 resolved through reflection.
+
+## Cleaning local artifacts
+
+Remove the standard local `artifacts/publish` and `artifacts/packages` trees:
+
+```powershell
+.\scripts\Clear-LocalArtifacts.ps1
+```
+
+Before deleting either tree, the script preserves every loose `.log` file and every
+`.log` file embedded in a `.zip`, `.tar`, `.tar.gz`, or `.tgz` package. Logs are copied
+to a timestamped directory under `artifacts/logs/archives`, retain their source-relative
+paths, and are recorded in a SHA-256 manifest. If copying or verification fails, the
+published and packaged artifacts are not deleted. Preview the cleanup with `-WhatIf`.

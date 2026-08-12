@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string] $Runtime = 'win-x64',
+    [string] $Runtime,
 
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Release',
@@ -25,4 +25,3 @@ if (-not [string]::IsNullOrWhiteSpace($OutputDirectory)) {
 }
 
 & "$PSScriptRoot\Publish-SingleFile.ps1" @parameters
-

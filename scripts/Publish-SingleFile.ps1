@@ -6,7 +6,7 @@ param(
     [Parameter(Mandatory)]
     [string] $ApplicationName,
 
-    [string] $Runtime = 'win-x64',
+    [string] $Runtime,
 
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Release',
@@ -20,6 +20,20 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($Runtime)) {
+    $Runtime = if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+            [System.Runtime.InteropServices.OSPlatform]::Linux)) {
+        'linux-x64'
+    }
+    elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+            [System.Runtime.InteropServices.OSPlatform]::Windows)) {
+        'win-x64'
+    }
+    else {
+        throw 'The host platform has no default runtime. Specify one with -Runtime.'
+    }
+}
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $resolvedProjectPath = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $ProjectPath))

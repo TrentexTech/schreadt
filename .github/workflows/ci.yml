@@ -44,7 +44,7 @@ jobs:
 
       - name: Publish examples
         shell: pwsh
-        run: ./scripts/Publish-AllExamples.ps1 -Runtime ${{ matrix.runtime }} -Configuration Release
+        run: ./scripts/Publish-AllExamples.ps1 -Configuration Release
 
       - name: Package published examples
         id: package
