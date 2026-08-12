@@ -91,11 +91,13 @@ internal sealed class PerformanceOverlay
         int fixedStepCount,
         CollisionStatistics2D collisions,
         RenderStatistics rendering,
+        FrameCompositionStatistics composition,
         PerformanceDisplayMetrics display)
     {
         if (!IsVisible) return;
         if (!double.IsFinite(frameTime) || frameTime <= 0) return;
         ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(composition);
 
         _smoothedFrameTime = _smoothedFrameTime <= 0
             ? frameTime
@@ -126,6 +128,12 @@ internal sealed class PerformanceOverlay
             DRAW: {rendering.DrawCallCount}  PRIM: {rendering.PrimitiveCount}  VERT: {rendering.VertexCount}
             UPLOAD: {rendering.TextureUploadCount}  DATA: {FormatBytes(rendering.TextureUploadByteCount)}
             """);
+        _root.Composition.Text = FormattableString.Invariant($"""
+            TOTAL: {composition.TotalMilliseconds:F2} MS
+            CORE: BG {composition.BackgroundMilliseconds:F2}  SCENE {composition.SceneMilliseconds:F2}  DIAG {composition.DiagnosticsMilliseconds:F2}  GUI {composition.GuiMilliseconds:F2}
+            STAGES: PRE {composition.BeforeSceneMilliseconds:F2}  POST {composition.AfterSceneMilliseconds:F2}  PREGUI {composition.BeforeGuiMilliseconds:F2}
+            {FormatPassTimings(composition.PassTimings)}
+            """);
         _root.Simulation.Text = FormattableString.Invariant(
             $"SIM: {simulationState}  FIXED: {fixedStepCount}  SCALE: {runtime.TimeScale:F2}");
         _root.Physics.Text = FormattableString.Invariant($"""
@@ -155,6 +163,32 @@ internal sealed class PerformanceOverlay
         return FormattableString.Invariant($"{byteCount / (1024.0 * 1024.0):F2} MB");
     }
 
+    private static string FormatPassTimings(IReadOnlyList<FrameCompositionPassTiming> passTimings)
+    {
+        if (passTimings.Count == 0) return "PASSES: NONE";
+        return string.Join('\n', passTimings.Select(timing => FormattableString.Invariant(
+            $"PASS {FormatStage(timing.Stage)} {FormatPassName(timing.Name)}: {timing.ElapsedMilliseconds:F2} MS")));
+    }
+
+    private static string FormatStage(FrameCompositionStage stage) => stage switch
+    {
+        FrameCompositionStage.BeforeScene => "PRE",
+        FrameCompositionStage.AfterScene => "POST",
+        FrameCompositionStage.BeforeGui => "PREGUI",
+        _ => "UNKNOWN"
+    };
+
+    private static string FormatPassName(string name)
+    {
+        var supported = name
+            .Trim()
+            .ToUpperInvariant()
+            .Select(character => BitmapFont5x7.Supports(character) ? character : ' ')
+            .ToArray();
+        var formatted = new string(supported).Trim();
+        return formatted.Length == 0 ? "UNNAMED" : formatted;
+    }
+
     private sealed class PerformanceOverlayRoot : GuiElement
     {
         private const float Margin = 12.0f;
@@ -162,6 +196,7 @@ internal sealed class PerformanceOverlay
         private static readonly Vector4D<float> Transparent = Vector4D<float>.Zero;
         private static readonly Vector4D<float> FrameColor = new(0.35f, 0.93f, 1.0f, 1.0f);
         private static readonly Vector4D<float> RenderingColor = new(0.42f, 0.68f, 1.0f, 1.0f);
+        private static readonly Vector4D<float> CompositionColor = new(0.32f, 0.88f, 0.82f, 1.0f);
         private static readonly Vector4D<float> SimulationColor = new(0.45f, 1.0f, 0.58f, 1.0f);
         private static readonly Vector4D<float> PhysicsColor = new(1.0f, 0.68f, 0.28f, 1.0f);
         private static readonly Vector4D<float> DisplayColor = new(0.78f, 0.58f, 1.0f, 1.0f);
@@ -175,6 +210,7 @@ internal sealed class PerformanceOverlay
 
         internal GuiLabel Frame { get; }
         internal GuiLabel Rendering { get; }
+        internal GuiLabel Composition { get; }
         internal GuiLabel Simulation { get; }
         internal GuiLabel Physics { get; }
         internal GuiLabel Display { get; }
@@ -188,6 +224,10 @@ internal sealed class PerformanceOverlay
 
             Frame = AddSection("FRAME", FrameColor, "FPS: --\nTIME: -- MS  RANGE: --");
             Rendering = AddSection("RENDERING", RenderingColor, "DRAW: --  PRIM: --  VERT: --\nUPLOAD: --  DATA: --");
+            Composition = AddSection(
+                "COMPOSITION",
+                CompositionColor,
+                "TOTAL: -- MS\nCORE: BG --  SCENE --  DIAG --  GUI --\nSTAGES: PRE --  POST --  PREGUI --\nPASSES: --");
             Simulation = AddSection("SIMULATION", SimulationColor, "SIM: --  FIXED: --  SCALE: --");
             Physics = AddSection("PHYSICS", PhysicsColor, "PHYS: --  CONTACT: --\nCHECKS: --");
             Display = AddSection(

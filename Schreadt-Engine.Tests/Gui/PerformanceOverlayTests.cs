@@ -46,6 +46,20 @@ public sealed class PerformanceOverlayTests
             fixedStepCount: 2,
             new CollisionStatistics2D(10, 8, 3, 28, 12, 2),
             new RenderStatistics(14, 92, 276, 1, 1280L * 720 * 4),
+            new FrameCompositionStatistics(
+                2.4,
+                0.2,
+                0.1,
+                1.2,
+                0.3,
+                0.1,
+                0.2,
+                0.3,
+                [
+                    new FrameCompositionPassTiming("Lightning", FrameCompositionStage.BeforeScene, 0.06),
+                    new FrameCompositionPassTiming("Rain", FrameCompositionStage.AfterScene, 0.22),
+                    new FrameCompositionPassTiming("Screen Flash", FrameCompositionStage.BeforeGui, 0.14)
+                ]),
             display);
         gui.Render(renderer);
 
@@ -55,6 +69,12 @@ public sealed class PerformanceOverlayTests
         Assert.Contains("TIME: 16.67 MS", text);
         Assert.Contains("DRAW: 14  PRIM: 92  VERT: 276", text);
         Assert.Contains("UPLOAD: 1  DATA: 3.52 MB", text);
+        Assert.Contains("TOTAL: 2.40 MS", text);
+        Assert.Contains("CORE: BG 0.20  SCENE 1.20  DIAG 0.10  GUI 0.30", text);
+        Assert.Contains("STAGES: PRE 0.10  POST 0.30  PREGUI 0.20", text);
+        Assert.Contains("PASS PRE LIGHTNING: 0.06 MS", text);
+        Assert.Contains("PASS POST RAIN: 0.22 MS", text);
+        Assert.Contains("PASS PREGUI SCREEN FLASH: 0.14 MS", text);
         Assert.Contains("SIM: RUNNING  FIXED: 2  SCALE: 1.00", text);
         Assert.Contains("PHYS: 8/10  CONTACT: 2", text);
         Assert.Contains("CHECKS: 28 PAIR  12 NARROW", text);
@@ -77,6 +97,7 @@ public sealed class PerformanceOverlayTests
         [
             "[FRAME]",
             "[RENDERING]",
+            "[COMPOSITION]",
             "[SIMULATION]",
             "[PHYSICS]",
             "[DISPLAY]",

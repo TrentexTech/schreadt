@@ -1,3 +1,4 @@
+using Schreadt_Engine.Component;
 using Schreadt_Engine.Core;
 using Silk.NET.Maths;
 
@@ -5,6 +6,8 @@ namespace Example_Game.Logic.scenes;
 
 internal sealed class Scene4 : PlatformerLevelLogic
 {
+    private TempestStorm2D _storm = null!;
+
     internal Scene4(IInputState input)
         : base(input, 5, "TEMPEST SPIRE", null)
     {
@@ -15,6 +18,13 @@ internal sealed class Scene4 : PlatformerLevelLogic
 
     protected override void BuildLevel()
     {
+        _storm = new TempestStorm2D();
+        if (Scene.Background is LayeredBackground2D background)
+            background.Insert(4, _storm.Clouds);
+        Scene.AddCompositionPass(_storm.Lightning);
+        Scene.AddCompositionPass(_storm.Rain);
+        Scene.AddCompositionPass(_storm.ScreenFlash);
+
         AddBoundaryWalls();
         AddPlatform(1.0, -1.85, 4.0, 0.6);
         AddUpdraft(3.45, -0.75, 0.95);
@@ -33,5 +43,10 @@ internal sealed class Scene4 : PlatformerLevelLogic
         AddStar(10.9, -0.2);
         AddStar(13.5, 1.45);
         AddGoal(16.0, -0.95);
+    }
+
+    public override void Update(double dt)
+    {
+        _storm.Update(dt);
     }
 }

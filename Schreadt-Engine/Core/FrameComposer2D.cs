@@ -1,6 +1,7 @@
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
+using System.Diagnostics;
 
 namespace Schreadt_Engine.Core;
 
@@ -8,7 +9,9 @@ namespace Schreadt_Engine.Core;
 /// Composes a scene frame from backgrounds, scene objects, collision
 /// diagnostics, and GUI without depending on a particular drawing backend.
 /// </summary>
-public sealed class FrameComposer2D : IBackgroundRenderContext2D, IPixelRenderContext2D
+public sealed class FrameComposer2D :
+    IBackgroundRenderContext2D,
+    IFrameCompositionContext2D
 {
     private readonly HashSet<IBackground2D> _activeBackgrounds = new(ReferenceEqualityComparer.Instance);
     private IFrameRenderer2D? _renderer;
@@ -17,6 +20,17 @@ public sealed class FrameComposer2D : IBackgroundRenderContext2D, IPixelRenderCo
     private double _aspectRatio;
 
     public Vector2D<int> ViewportSize => Renderer.ViewportSize;
+
+    CameraView2D IFrameCompositionContext2D.View
+    {
+        get
+        {
+            EnsureComposing();
+            return _currentView;
+        }
+    }
+
+    public FrameCompositionStatistics Statistics { get; private set; } = FrameCompositionStatistics.Empty;
 
     public BackgroundView2D View
     {
@@ -56,16 +70,40 @@ public sealed class FrameComposer2D : IBackgroundRenderContext2D, IPixelRenderCo
         _aspectRatio = aspectRatio;
         _currentView = initialView;
         var frameBegun = false;
+        var totalStarted = Stopwatch.GetTimestamp();
+        var backgroundMilliseconds = 0.0;
+        var beforeSceneMilliseconds = 0.0;
+        var sceneMilliseconds = 0.0;
+        var afterSceneMilliseconds = 0.0;
+        var diagnosticsMilliseconds = 0.0;
+        var beforeGuiMilliseconds = 0.0;
+        var guiMilliseconds = 0.0;
+        var passTimings = new List<FrameCompositionPassTiming>();
 
         try
         {
             renderer.BeginFrame(_currentView);
             frameBegun = true;
 
-            if (scene.Background is { Enabled: true } background) RenderBackground(background);
-            scene.Render(this);
-            scene.Collisions.DrawDiagnostics(this);
-            gui?.Render(this);
+            backgroundMilliseconds = Measure(() =>
+            {
+                if (scene.Background is { Enabled: true } background) RenderBackground(background);
+            });
+            beforeSceneMilliseconds = RenderPasses(
+                scene,
+                FrameCompositionStage.BeforeScene,
+                passTimings);
+            sceneMilliseconds = Measure(() => scene.Render(this));
+            afterSceneMilliseconds = RenderPasses(
+                scene,
+                FrameCompositionStage.AfterScene,
+                passTimings);
+            diagnosticsMilliseconds = Measure(() => scene.Collisions.DrawDiagnostics(this));
+            beforeGuiMilliseconds = RenderPasses(
+                scene,
+                FrameCompositionStage.BeforeGui,
+                passTimings);
+            guiMilliseconds = Measure(() => gui?.Render(this));
         }
         finally
         {
@@ -75,6 +113,16 @@ public sealed class FrameComposer2D : IBackgroundRenderContext2D, IPixelRenderCo
             }
             finally
             {
+                Statistics = new FrameCompositionStatistics(
+                    Stopwatch.GetElapsedTime(totalStarted).TotalMilliseconds,
+                    backgroundMilliseconds,
+                    beforeSceneMilliseconds,
+                    sceneMilliseconds,
+                    afterSceneMilliseconds,
+                    diagnosticsMilliseconds,
+                    beforeGuiMilliseconds,
+                    guiMilliseconds,
+                    passTimings);
                 _activeBackgrounds.Clear();
                 _renderer = null;
                 _camera = null;
@@ -82,6 +130,46 @@ public sealed class FrameComposer2D : IBackgroundRenderContext2D, IPixelRenderCo
                 _aspectRatio = 0.0;
             }
         }
+    }
+
+    private double RenderPasses(
+        Scene scene,
+        FrameCompositionStage stage,
+        List<FrameCompositionPassTiming> passTimings)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var passes = scene.CompositionPasses
+            .Select((pass, index) => (Pass: pass, Index: index))
+            .Where(entry => entry.Pass.Stage == stage && entry.Pass.Enabled)
+            .OrderBy(entry => entry.Pass.Order)
+            .ThenBy(entry => entry.Index)
+            .Select(entry => entry.Pass)
+            .ToArray();
+
+        foreach (var pass in passes)
+        {
+            var passStarted = Stopwatch.GetTimestamp();
+            try
+            {
+                pass.Render(this);
+            }
+            finally
+            {
+                passTimings.Add(new FrameCompositionPassTiming(
+                    pass.Name,
+                    stage,
+                    Stopwatch.GetElapsedTime(passStarted).TotalMilliseconds));
+            }
+        }
+
+        return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+    }
+
+    private static double Measure(Action action)
+    {
+        var started = Stopwatch.GetTimestamp();
+        action();
+        return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
 
     public void RenderBackground(IBackground2D background)

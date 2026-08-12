@@ -97,6 +97,7 @@ internal class Application
                 _lastFixedStepCount,
                 Reality.Scene.Collisions.Statistics,
                 renderer.Statistics,
+                Reality.CompositionStatistics,
                 PerformanceDisplayMetrics.Create(
                     Window.Size,
                     Window.DisplayState,

@@ -16,6 +16,9 @@ public sealed class FrameComposerTests
     private static readonly Vector4D<float> SceneColor = new(0.1f, 0.2f, 0.9f, 1.0f);
     private static readonly Vector4D<float> DiagnosticColor = new(0.95f, 0.8f, 0.1f, 0.8f);
     private static readonly Vector4D<float> GuiColor = new(0.8f, 0.1f, 0.8f, 1.0f);
+    private static readonly Vector4D<float> BeforeSceneColor = new(0.2f, 0.7f, 0.9f, 1.0f);
+    private static readonly Vector4D<float> AfterSceneColor = new(0.9f, 0.5f, 0.2f, 1.0f);
+    private static readonly Vector4D<float> BeforeGuiColor = new(0.6f, 0.3f, 0.9f, 0.5f);
 
     [Fact]
     public void ComposeFrame_RecordsBackgroundSceneDiagnosticsAndGuiInOrder()
@@ -36,6 +39,19 @@ public sealed class FrameComposerTests
         };
         sceneRectangle.AddComponent(new AxisAlignedBoxCollider2D(Vector2D<double>.One));
         scene.AddChild(sceneRectangle);
+        scene.AddCompositionPass(new DrawingCompositionPass(
+            "weather-behind",
+            FrameCompositionStage.BeforeScene,
+            BeforeSceneColor));
+        scene.AddCompositionPass(new DrawingCompositionPass(
+            "weather-front",
+            FrameCompositionStage.AfterScene,
+            AfterSceneColor));
+        scene.AddCompositionPass(new DrawingCompositionPass(
+            "weather-flash",
+            FrameCompositionStage.BeforeGui,
+            BeforeGuiColor,
+            screenSpace: true));
         scene.Collisions.DebugDraw.Enabled = true;
         scene.Collisions.DebugDraw.StaticColor = DiagnosticColor;
         scene.Init();
@@ -52,8 +68,9 @@ public sealed class FrameComposerTests
             RotationRadians = 0.2
         };
         var renderer = new RecordingFrameRenderer();
+        var composer = new FrameComposer2D();
 
-        new FrameComposer2D().ComposeFrame(renderer, camera, scene, gui);
+        composer.ComposeFrame(renderer, camera, scene, gui);
 
         Assert.Equal("begin", renderer.Commands[0].Kind);
         Assert.Equal("end", renderer.Commands[^1].Kind);
@@ -63,17 +80,28 @@ public sealed class FrameComposerTests
         var far = renderer.Find("rectangle", FarBackgroundColor);
         var near = renderer.Find("circle", NearBackgroundColor);
         var sceneDraw = renderer.Find("rectangle", SceneColor);
+        var beforeScene = renderer.Find("rectangle", BeforeSceneColor);
+        var afterScene = renderer.Find("rectangle", AfterSceneColor);
         var diagnostics = renderer.Find("rectangle", DiagnosticColor);
+        var beforeGui = renderer.Find("screen-rectangle", BeforeGuiColor);
         var guiDraw = renderer.Find("screen-rectangle", GuiColor);
 
         Assert.True(far.Index < near.Index);
-        Assert.True(near.Index < sceneDraw.Index);
-        Assert.True(sceneDraw.Index < diagnostics.Index);
-        Assert.True(diagnostics.Index < guiDraw.Index);
+        Assert.True(near.Index < beforeScene.Index);
+        Assert.True(beforeScene.Index < sceneDraw.Index);
+        Assert.True(sceneDraw.Index < afterScene.Index);
+        Assert.True(afterScene.Index < diagnostics.Index);
+        Assert.True(diagnostics.Index < beforeGui.Index);
+        Assert.True(beforeGui.Index < guiDraw.Index);
         Assert.Equal(new Vector2D<double>(2.0, 0.5), far.Command.View.Center);
         Assert.Equal(new Vector2D<double>(4.0, 1.0), near.Command.View.Center);
         Assert.Equal(camera.RenderPosition, sceneDraw.Command.View.Center);
         Assert.Equal(camera.RenderPosition, diagnostics.Command.View.Center);
+        Assert.Equal(
+            ["weather-behind", "weather-front", "weather-flash"],
+            composer.Statistics.PassTimings.Select(timing => timing.Name));
+        Assert.True(composer.Statistics.TotalMilliseconds >= 0.0);
+        Assert.True(composer.Statistics.SceneMilliseconds >= 0.0);
     }
 
     [Fact]
@@ -89,6 +117,51 @@ public sealed class FrameComposerTests
 
         Assert.Contains(renderer.Commands, command => command.Kind == "pixels");
         Assert.Same(surface, renderer.LastPixelSurface);
+    }
+
+    [Fact]
+    public void SceneCompositionPasses_AreOwnedOrderedAndCanBeDisabled()
+    {
+        var scene = new Scene("pass-order", new EmptySceneLogic()) { Background = null };
+        var lateColor = new Vector4D<float>(0.9f, 0.2f, 0.1f, 1.0f);
+        var earlyColor = new Vector4D<float>(0.1f, 0.9f, 0.2f, 1.0f);
+        var disabledColor = new Vector4D<float>(0.2f, 0.1f, 0.9f, 1.0f);
+        var late = scene.AddCompositionPass(new DrawingCompositionPass(
+            "late",
+            FrameCompositionStage.AfterScene,
+            lateColor,
+            order: 10));
+        scene.AddCompositionPass(new DrawingCompositionPass(
+            "early",
+            FrameCompositionStage.AfterScene,
+            earlyColor,
+            order: -10));
+        scene.AddCompositionPass(new DrawingCompositionPass(
+            "disabled",
+            FrameCompositionStage.AfterScene,
+            disabledColor)
+        {
+            Enabled = false
+        });
+
+        Assert.Throws<InvalidOperationException>(() => scene.AddCompositionPass(late));
+        Assert.Throws<InvalidOperationException>(() => scene.AddCompositionPass(new DrawingCompositionPass(
+            "late",
+            FrameCompositionStage.BeforeGui,
+            Vector4D<float>.One)));
+        scene.Init();
+        var renderer = new RecordingFrameRenderer();
+        var composer = new FrameComposer2D();
+
+        composer.ComposeFrame(renderer, new Camera(), scene);
+
+        var early = renderer.Find("rectangle", earlyColor);
+        var lateCommand = renderer.Find("rectangle", lateColor);
+        Assert.True(early.Index < lateCommand.Index);
+        Assert.DoesNotContain(renderer.Commands, command => command.Color == disabledColor);
+        Assert.Equal(["early", "late"], composer.Statistics.PassTimings.Select(timing => timing.Name));
+        Assert.True(scene.RemoveCompositionPass(late));
+        Assert.False(scene.RemoveCompositionPass(late));
     }
 
     [Fact]
@@ -167,6 +240,30 @@ public sealed class FrameComposerTests
         {
             if (drawCircle) context.DrawCircle(Vector2D<double>.Zero, 1.0, color);
             else context.DrawRectangle(Vector2D<double>.Zero, Vector2D<double>.One, color);
+        }
+    }
+
+    private sealed class DrawingCompositionPass(
+        string name,
+        FrameCompositionStage stage,
+        Vector4D<float> color,
+        int order = 0,
+        bool screenSpace = false) : IFrameCompositionPass2D
+    {
+        public string Name { get; } = name;
+        public FrameCompositionStage Stage { get; } = stage;
+        public int Order { get; } = order;
+        public bool Enabled { get; set; } = true;
+
+        public void Render(IFrameCompositionContext2D context)
+        {
+            if (screenSpace)
+            {
+                context.DrawScreenRectangle(Vector2D<float>.Zero, new Vector2D<float>(16.0f, 9.0f), color);
+                return;
+            }
+
+            context.DrawRectangle(Vector2D<double>.Zero, Vector2D<double>.One, color);
         }
     }
 

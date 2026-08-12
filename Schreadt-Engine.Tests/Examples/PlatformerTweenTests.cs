@@ -1,4 +1,5 @@
 using Example_Game.Logic;
+using Example_Game.Logic.scenes;
 using System.Numerics;
 using Schreadt_Engine.Animation.Tweening;
 using Schreadt_Engine.Collision;
@@ -147,6 +148,134 @@ public sealed class PlatformerTweenTests
         Assert.Equal(5.35, player.GetComponent<RigidBody2D>()!.Velocity.Y, 10);
     }
 
+    [Fact]
+    public void TempestStorm_UsesBackgroundAndAllCompositionPassStages()
+    {
+        var storm = new TempestStorm2D(randomSeed: 7);
+        var initialCloudOffset = storm.CloudOffset;
+
+        storm.Update(1.3);
+
+        Assert.True(storm.CloudOffset > initialCloudOffset);
+        Assert.True(storm.RainPhase > 0.0);
+        Assert.True(storm.LightningIntensity > 0.0);
+        Assert.Equal(FrameCompositionStage.BeforeScene, storm.Lightning.Stage);
+        Assert.Equal(FrameCompositionStage.AfterScene, storm.Rain.Stage);
+        Assert.Equal(FrameCompositionStage.BeforeGui, storm.ScreenFlash.Stage);
+        Assert.True(storm.Lightning.Enabled);
+        Assert.True(storm.ScreenFlash.Enabled);
+
+        var context = new StormRenderContext();
+        storm.Clouds.Render(context);
+        storm.Lightning.Render(context);
+        storm.Rain.Render(context);
+        storm.ScreenFlash.Render(context);
+
+        Assert.True(context.CircleCount >= 3);
+        Assert.True(context.WorldRectangleCount >= 1);
+        Assert.Contains(context.LineBatchSizes, count => count == 7);
+        Assert.Contains(context.LineBatchSizes, count => count == 72);
+        Assert.Equal(1, context.ScreenRectangleCount);
+    }
+
+    [Fact]
+    public void TempestClouds_KeepTheirRowsWhenCameraCrossesACloudBoundary()
+    {
+        var storm = new TempestStorm2D(randomSeed: 7);
+        var firstView = new StormRenderContext(new CameraView2D(
+            Vector2D<double>.Zero,
+            2.4,
+            16.0 / 9.0));
+        var shiftedView = new StormRenderContext(new CameraView2D(
+            new Vector2D<double>(2.0, 0.0),
+            2.4,
+            16.0 / 9.0));
+
+        storm.Clouds.Render(firstView);
+        storm.Clouds.Render(shiftedView);
+
+        var sharedClouds = firstView.WorldRectangleCenters
+            .Select(first => (First: first, Second: shiftedView.WorldRectangleCenters
+                .SingleOrDefault(second => Math.Abs(second.X - first.X) < 1e-10)))
+            .Where(pair => pair.Second != default)
+            .ToArray();
+        Assert.True(sharedClouds.Length >= 3);
+        Assert.All(sharedClouds, pair => Assert.Equal(pair.First.Y, pair.Second.Y, 10));
+    }
+
+    [Fact]
+    public void TempestClouds_WrapTheirDriftPhaseWithoutChangingRows()
+    {
+        var storm = new TempestStorm2D(randomSeed: 7);
+        const double timeAcrossWrap = 0.1;
+        storm.Update(TempestStorm2D.CloudSpacing / TempestStorm2D.CloudSpeed - timeAcrossWrap * 0.5);
+        var beforeWrap = new StormRenderContext();
+        storm.Clouds.Render(beforeWrap);
+
+        storm.Update(timeAcrossWrap);
+        var afterWrap = new StormRenderContext();
+        storm.Clouds.Render(afterWrap);
+
+        var expectedMovement = timeAcrossWrap * TempestStorm2D.CloudSpeed;
+        var continuousClouds = beforeWrap.WorldRectangleCenters
+            .Where(center => Math.Abs(center.X) < 3.5)
+            .Select(before => (Before: before, After: afterWrap.WorldRectangleCenters.Single(
+                after => Math.Abs(after.X - (before.X + expectedMovement)) < 1e-10)))
+            .ToArray();
+        Assert.NotEmpty(continuousClouds);
+        Assert.All(continuousClouds, pair => Assert.Equal(pair.Before.Y, pair.After.Y, 10));
+
+        var elapsed = 25.0;
+        var normalizedStorm = new TempestStorm2D(randomSeed: 7);
+        normalizedStorm.Update(elapsed);
+        Assert.Equal(
+            elapsed * TempestStorm2D.CloudSpeed % TempestStorm2D.CloudSpacing,
+            normalizedStorm.CloudOffset,
+            10);
+    }
+
+    [Fact]
+    public void TempestRain_WrapsAtItsRenderedTravelWithoutJumping()
+    {
+        var storm = new TempestStorm2D(randomSeed: 7);
+        var initial = new StormRenderContext();
+        storm.Rain.Render(initial);
+
+        storm.Update(TempestStorm2D.RainTravel / TempestStorm2D.RainSpeed);
+        var repeated = new StormRenderContext();
+        storm.Rain.Render(repeated);
+
+        Assert.Equal(0.0, storm.RainPhase, 10);
+        var initialRain = Assert.Single(initial.LineBatches);
+        var repeatedRain = Assert.Single(repeated.LineBatches);
+        Assert.Equal(initialRain, repeatedRain);
+
+        const double halfStep = 0.01;
+        storm.Update(TempestStorm2D.RainTravel / TempestStorm2D.RainSpeed - halfStep);
+        var beforeWrap = new StormRenderContext();
+        storm.Rain.Render(beforeWrap);
+        storm.Update(halfStep * 2.0);
+        var afterWrap = new StormRenderContext();
+        storm.Rain.Render(afterWrap);
+
+        var beforeRain = Assert.Single(beforeWrap.LineBatches);
+        var afterRain = Assert.Single(afterWrap.LineBatches);
+        var expectedMovement = halfStep * 2.0 * TempestStorm2D.RainSpeed;
+        Assert.Equal(beforeRain.Count, afterRain.Count);
+        for (var index = 0; index < beforeRain.Count; index++)
+        {
+            var before = beforeWrap.View.WorldToNormalizedDevicePoint(beforeRain[index].Start);
+            var after = afterWrap.View.WorldToNormalizedDevicePoint(afterRain[index].Start);
+            Assert.Equal(before.X, after.X, 10);
+
+            var actualMovement = after.Y - before.Y;
+            var expectedDropMovement = -expectedMovement;
+            if (actualMovement > expectedDropMovement + 1.0)
+                expectedDropMovement += TempestStorm2D.RainTravel;
+            Assert.Equal(expectedDropMovement, actualMovement, 10);
+        }
+    }
+
     private sealed class TestActor : Actor;
 
     private sealed class EmptySceneLogic : SceneLogic
@@ -213,6 +342,93 @@ public sealed class PlatformerTweenTests
             Vector2D<float> position,
             Vector2D<float> size,
             Vector4D<float> color)
+        {
+        }
+    }
+
+    private sealed class StormRenderContext : IFrameCompositionContext2D, IBackgroundRenderContext2D
+    {
+        internal StormRenderContext(CameraView2D? view = null)
+        {
+            View = view ?? new CameraView2D(Vector2D<double>.Zero, 2.4, 16.0 / 9.0);
+        }
+
+        public Vector2D<int> ViewportSize => new(1280, 720);
+        public CameraView2D View { get; }
+        BackgroundView2D IBackgroundRenderContext2D.View
+        {
+            get
+            {
+                var (minimum, maximum) = View.GetVisibleBounds();
+                return new BackgroundView2D(
+                    View.Center,
+                    View.RotationRadians,
+                    View.OrthographicSize,
+                    View.AspectRatio,
+                    minimum,
+                    maximum);
+            }
+        }
+
+        internal int CircleCount { get; private set; }
+        internal int WorldRectangleCount => WorldRectangleCenters.Count;
+        internal int ScreenRectangleCount { get; private set; }
+        internal List<Vector2D<double>> WorldRectangleCenters { get; } = [];
+        internal List<int> LineBatchSizes { get; } = [];
+        internal List<IReadOnlyList<LineSegment2D>> LineBatches { get; } = [];
+
+        public void RenderBackground(IBackground2D background) => background.Render(this);
+
+        public void DrawLines(IReadOnlyList<LineSegment2D> lines, Vector4D<float> color)
+        {
+            LineBatchSizes.Add(lines.Count);
+            LineBatches.Add(lines.ToArray());
+        }
+
+        public void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color) => CircleCount++;
+
+        public void DrawRectangle(
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> color,
+            double rotationRadians = 0.0) => WorldRectangleCenters.Add(center);
+
+        public void DrawPolygon(
+            Vector2D<double> center,
+            IReadOnlyList<Vector2D<double>> localVertices,
+            Vector2D<double> scale,
+            double rotationRadians,
+            Vector4D<float> color)
+        {
+        }
+
+        public void DrawSprite(
+            string imageAssetId,
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> tint,
+            double rotationRadians = 0.0,
+            TextureRegion? region = null,
+            TextureSampling sampling = TextureSampling.Linear)
+        {
+        }
+
+        public void DrawText(
+            string text,
+            Vector2D<float> position,
+            float scale,
+            Vector4D<float> color,
+            Vector4D<float> backgroundColor,
+            float padding = 0.0f)
+        {
+        }
+
+        public void DrawScreenRectangle(
+            Vector2D<float> position,
+            Vector2D<float> size,
+            Vector4D<float> color) => ScreenRectangleCount++;
+
+        public void DrawScreenPixels(PixelSurface surface, TextureSampling sampling = TextureSampling.Nearest)
         {
         }
     }

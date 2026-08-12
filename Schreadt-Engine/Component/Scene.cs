@@ -7,6 +7,7 @@ namespace Schreadt_Engine.Component;
 
 public class Scene : GameObject
 {
+    private readonly List<IFrameCompositionPass2D> _compositionPasses = [];
     private bool _unloaded;
 
     internal IEngineContext? EngineContext { get; }
@@ -15,6 +16,7 @@ public class Scene : GameObject
     public SceneLogic Logic { get; }
     public CollisionWorld2D Collisions { get; } = new();
     public IBackground2D? Background { get; set; } = new GridBackground2D();
+    public IReadOnlyList<IFrameCompositionPass2D> CompositionPasses => _compositionPasses;
     public GuiLayer Gui { get; } = new();
     public GuiScreenStack Screens => Gui.Screens;
 
@@ -40,6 +42,25 @@ public class Scene : GameObject
     internal void UnregisterComponent(GameComponent component)
     {
         if (component is Collider2D collider) Collisions.RemoveCollider(collider);
+    }
+
+    public T AddCompositionPass<T>(T pass) where T : IFrameCompositionPass2D
+    {
+        ArgumentNullException.ThrowIfNull(pass);
+        ValidateCompositionPass(pass);
+        if (_compositionPasses.Any(existing => ReferenceEquals(existing, pass)))
+            throw new InvalidOperationException("The composition pass is already registered with this scene.");
+        if (_compositionPasses.Any(existing => string.Equals(existing.Name, pass.Name, StringComparison.Ordinal)))
+            throw new InvalidOperationException($"A composition pass named '{pass.Name}' is already registered.");
+
+        _compositionPasses.Add(pass);
+        return pass;
+    }
+
+    public bool RemoveCompositionPass(IFrameCompositionPass2D pass)
+    {
+        ArgumentNullException.ThrowIfNull(pass);
+        return _compositionPasses.Remove(pass);
     }
 
     protected override void OnInit()
@@ -69,8 +90,17 @@ public class Scene : GameObject
         Shutdown();
         DetachFromScene();
         Collisions.Clear();
+        _compositionPasses.Clear();
         Gui.Clear();
         Screens.SetRuntime(null);
         _unloaded = true;
+    }
+
+    private static void ValidateCompositionPass(IFrameCompositionPass2D pass)
+    {
+        if (string.IsNullOrWhiteSpace(pass.Name))
+            throw new ArgumentException("A composition pass must have a non-empty name.", nameof(pass));
+        if (!Enum.IsDefined(pass.Stage))
+            throw new ArgumentOutOfRangeException(nameof(pass), "The composition pass stage is invalid.");
     }
 }

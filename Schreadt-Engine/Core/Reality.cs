@@ -17,6 +17,7 @@ public class Reality : IUpdateable
     public Scene Scene => Scenes.CurrentScene
         ?? throw new InvalidOperationException("No scene is currently loaded.");
     public Camera MainCamera { get; private set; }
+    public FrameCompositionStatistics CompositionStatistics => _frameComposer.Statistics;
 
     internal Reality(GameLogic? gameLogic, GuiSystem? gui = null, RuntimeController? runtime = null)
     {
