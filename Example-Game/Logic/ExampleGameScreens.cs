@@ -34,7 +34,7 @@ internal static class PlatformerScreens
         restart.Clicked += (_, _) =>
         {
             scene.Screens.Remove(screen);
-            scene.Context.Scenes.ReloadCurrentScene();
+            scene.Context.Scenes.ReloadCurrentScene(ExampleGameLogic.LevelTransition);
         };
         quit.Clicked += (_, _) => scene.Context.Window.RequestClose();
         return screen;
@@ -63,7 +63,7 @@ internal static class PlatformerScreens
         again.Clicked += (_, _) =>
         {
             scene.Screens.Remove(screen);
-            scene.Context.Scenes.LoadScene(ExampleGameLogic.LevelOne);
+            scene.Context.Scenes.LoadScene(ExampleGameLogic.LevelOne, ExampleGameLogic.LevelTransition);
         };
         quit.Clicked += (_, _) => scene.Context.Window.RequestClose();
         scene.Screens.Push(screen);

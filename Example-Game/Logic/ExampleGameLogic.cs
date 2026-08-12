@@ -1,4 +1,5 @@
 using Example_Game.Logic.scenes;
+using Schreadt_Engine.Animation.Tweening;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Core;
 using Schreadt_Engine.Gui;
@@ -13,6 +14,10 @@ public sealed class ExampleGameLogic : GameLogic
     internal const string LevelThree = "lunar-gardens";
     internal const string LevelFour = "clockwork-fortress";
     internal const string LevelFive = "tempest-spire";
+    internal static SceneTransition LevelTransition { get; } = new FadeToColorSceneTransition(
+        new Vector4D<float>(0.01f, 0.02f, 0.06f, 1.0f),
+        0.55,
+        TweenEasings.SineInOut);
     private readonly IInputService? _inputOverride;
 
     private IInputService Input => _inputOverride ?? Context.Input;
@@ -57,7 +62,7 @@ public sealed class ExampleGameLogic : GameLogic
         if (Input.WasActionPressed(ExampleInputActions.Restart))
         {
             Reality.Scene.Screens.Clear();
-            Reality.Scenes.ReloadCurrentScene();
+            Reality.Scenes.ReloadCurrentScene(LevelTransition);
         }
 
         if (Input.WasActionPressed(ExampleInputActions.Pause)) TogglePause();

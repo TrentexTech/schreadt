@@ -257,7 +257,8 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         {
             if (_finished || !ReferenceEquals(contact.Other.Owner, _player)) return;
             _finished = true;
-            if (_nextScene is not null) Context.Scenes.LoadScene(_nextScene);
+            if (_nextScene is not null)
+                Context.Scenes.LoadScene(_nextScene, ExampleGameLogic.LevelTransition);
             else PlatformerScreens.ShowVictory(Scene, _stars, _playerBehavior.Deaths);
         };
         Scene.AddChild(portal);

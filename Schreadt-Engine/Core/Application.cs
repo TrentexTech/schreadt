@@ -57,13 +57,20 @@ internal class Application
             Gui.Update(Input, dt);
             if (_shutdown || Window.IsCloseRequested) return;
 
-            Reality.ProcessPendingSceneChange();
+            Reality.ProcessPendingSceneChange(dt);
 
+            var sceneTransitionWasActive = Reality.Scenes.IsTransitioning;
             var timing = Runtime.Advance(dt);
-            _lastFixedStepCount = timing.FixedStepCount;
-            if (!timing.ShouldUpdateSimulation) return;
+            Reality.CompleteSceneTransitionFrame();
+            _lastFixedStepCount = sceneTransitionWasActive ? 0 : timing.FixedStepCount;
+            if (sceneTransitionWasActive || !timing.ShouldUpdateSimulation) return;
 
             Reality.UpdateGameplay(timing.FrameDeltaTime);
+            if (Reality.Scenes.IsTransitioning)
+            {
+                _lastFixedStepCount = 0;
+                return;
+            }
 
             for (var step = 0; step < timing.FixedStepCount; step++)
             {

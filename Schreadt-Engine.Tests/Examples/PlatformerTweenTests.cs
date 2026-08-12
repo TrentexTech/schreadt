@@ -121,6 +121,7 @@ public sealed class PlatformerTweenTests
         Assert.Same(pause.OpeningTransition, pause.ClosingTransition);
         Assert.Equal(GuiSlideDirection.Down, slide.Direction);
         Assert.IsType<FadeToColorScreenTransition>(scene.Screens.Top!.OpeningTransition);
+        Assert.IsType<FadeToColorSceneTransition>(ExampleGameLogic.LevelTransition);
         Assert.True(scene.Screens.IsTransitioning);
     }
 

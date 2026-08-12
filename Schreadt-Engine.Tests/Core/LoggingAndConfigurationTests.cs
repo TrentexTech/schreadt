@@ -2,6 +2,7 @@ using Schreadt_Engine.Core;
 
 namespace Schreadt_Engine.Tests.Core;
 
+[Collection("Engine lifecycle")]
 public sealed class LoggingAndConfigurationTests
 {
     [Fact]

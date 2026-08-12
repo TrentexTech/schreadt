@@ -51,23 +51,31 @@ public class Reality : IUpdateable
 
     internal void UpdateGameplay(double dt)
     {
+        if (Scenes.IsTransitioning) return;
         GameLogic?.Update(dt);
         Scenes.Update(dt);
     }
 
-    internal void ProcessPendingSceneChange()
+    internal void ProcessPendingSceneChange(double unscaledDeltaTime)
     {
-        Scenes.ProcessPendingSceneChange();
+        Scenes.ProcessPendingSceneChange(unscaledDeltaTime);
     }
 
     internal void FixedUpdate(double dt)
     {
+        if (Scenes.IsTransitioning) return;
         GameLogic?.FixedUpdate(dt);
         Scenes.FixedUpdate(dt);
     }
 
+    internal void CompleteSceneTransitionFrame()
+    {
+        Scenes.CompleteTransitionFrame();
+    }
+
     internal void UpdateCamera(double dt)
     {
+        if (Scenes.IsTransitioning) return;
         MainCamera.Update(dt);
     }
 

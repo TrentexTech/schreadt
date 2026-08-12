@@ -9,8 +9,10 @@ public sealed class GuiSystem
 
     private readonly List<IGuiElement> _elements = [];
     private readonly List<GuiLayer> _layers = [];
+    private readonly List<IGuiElement> _overlays = [];
     private readonly HashSet<GuiLayer> _transitionBlockedLayers = [];
     private readonly float _referenceHeight;
+    private int _inputBlockRequestCount;
     private GuiControl? _capturedControl;
     private GuiControl? _hoveredControl;
     private Vector2D<float> _pointerViewportOffset;
@@ -40,6 +42,9 @@ public sealed class GuiSystem
     public bool IsPointerOverControl => _hoveredControl is not null;
 
     public bool IsPointerCaptured => _capturedControl is not null;
+
+    /// <summary>Whether an engine-owned flow currently blocks GUI interaction.</summary>
+    public bool IsInputBlocked => _inputBlockRequestCount > 0;
 
     public T Add<T>(T element) where T : IGuiElement
     {
@@ -93,6 +98,45 @@ public sealed class GuiSystem
         return true;
     }
 
+    internal T AddOverlay<T>(T element) where T : IGuiElement
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        GuiElementOwnership.Claim(element, this, "engine GUI overlay collection");
+        try
+        {
+            _overlays.Add(element);
+        }
+        catch
+        {
+            GuiElementOwnership.Release(element, this);
+            throw;
+        }
+
+        return element;
+    }
+
+    internal bool RemoveOverlay(IGuiElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        if (!_overlays.Remove(element)) return false;
+        ReleaseInteraction(element);
+        GuiElementOwnership.Release(element, this);
+        return true;
+    }
+
+    internal void AcquireInputBlock()
+    {
+        _inputBlockRequestCount = checked(_inputBlockRequestCount + 1);
+        if (_inputBlockRequestCount == 1) ReleaseAllInteraction();
+    }
+
+    internal void ReleaseInputBlock()
+    {
+        if (_inputBlockRequestCount <= 0)
+            throw new InvalidOperationException("There is no GUI input-block request to release.");
+        _inputBlockRequestCount--;
+    }
+
     public void Update(IInputState input) => Update(input, 0.0);
 
     /// <summary>
@@ -112,6 +156,12 @@ public sealed class GuiSystem
             if (!_layers.Contains(layer)) continue;
             if (layer.Screens.IsTransitioning) _transitionBlockedLayers.Add(layer);
             layer.Screens.UpdateTransition(unscaledDeltaTime);
+        }
+
+        if (IsInputBlocked)
+        {
+            ReleaseAllInteraction();
+            return;
         }
 
         if (input.WasKeyPressed(InputKey.Escape)) DismissTopScreenOnEscape();
@@ -175,6 +225,7 @@ public sealed class GuiSystem
         }
 
         foreach (var element in _elements.ToArray()) RenderRoot(element, viewportSize, scaledRenderer);
+        foreach (var overlay in _overlays.ToArray()) RenderRoot(overlay, viewportSize, scaledRenderer);
     }
 
     internal void SetViewportSizes(
@@ -210,6 +261,13 @@ public sealed class GuiSystem
             _capturedControl.CancelPress();
             _capturedControl = null;
         }
+    }
+
+    private void ReleaseAllInteraction()
+    {
+        SetHoveredControl(null);
+        _capturedControl?.CancelPress();
+        _capturedControl = null;
     }
 
     private static void RenderRoot(
