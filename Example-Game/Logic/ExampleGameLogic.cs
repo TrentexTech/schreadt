@@ -66,7 +66,13 @@ public sealed class ExampleGameLogic : GameLogic
     private void TogglePause()
     {
         var scene = Reality.Scene;
-        if (scene.Screens.Remove(PlatformerScreens.PauseScreenName)) return;
+        if (scene.Screens.IsTransitioning) return;
+        if (scene.Screens.Top?.Name == PlatformerScreens.PauseScreenName)
+        {
+            scene.Screens.Pop();
+            return;
+        }
+
         if (!scene.Screens.Contains(PlatformerScreens.VictoryScreenName))
             scene.Screens.Push(PlatformerScreens.CreatePauseScreen(scene));
     }

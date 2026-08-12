@@ -1,6 +1,7 @@
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Core;
 using Schreadt_Engine.Gui;
+using Schreadt_Engine.Animation.Tweening;
 using Silk.NET.Maths;
 
 namespace Example_Game.Logic;
@@ -9,6 +10,8 @@ internal static class PlatformerScreens
 {
     internal const string PauseScreenName = "pause";
     internal const string VictoryScreenName = "victory";
+    private static readonly GuiScreenTransition PauseTransition =
+        new SlideScreenTransition(GuiSlideDirection.Down, 0.24, TweenEasings.CubicOut);
 
     internal static GuiScreen CreatePauseScreen(Scene scene)
     {
@@ -23,9 +26,11 @@ internal static class PlatformerScreens
         {
             IsModal = true,
             PausesSimulation = true,
-            DismissOnEscape = true
+            DismissOnEscape = true,
+            OpeningTransition = PauseTransition,
+            ClosingTransition = PauseTransition
         };
-        resume.Clicked += (_, _) => scene.Screens.Remove(screen);
+        resume.Clicked += (_, _) => scene.Screens.Pop();
         restart.Clicked += (_, _) =>
         {
             scene.Screens.Remove(screen);
@@ -49,7 +54,11 @@ internal static class PlatformerScreens
         var screen = new GuiScreen(VictoryScreenName, panel)
         {
             IsModal = true,
-            PausesSimulation = true
+            PausesSimulation = true,
+            OpeningTransition = new FadeToColorScreenTransition(
+                new Vector4D<float>(0.015f, 0.025f, 0.07f, 1.0f),
+                0.5,
+                TweenEasings.SineInOut)
         };
         again.Clicked += (_, _) =>
         {

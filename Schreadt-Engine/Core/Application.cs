@@ -54,7 +54,7 @@ internal class Application
         try
         {
             _performanceOverlay.HandleInput(Input);
-            Gui.Update(Input);
+            Gui.Update(Input, dt);
             if (_shutdown || Window.IsCloseRequested) return;
 
             Reality.ProcessPendingSceneChange();

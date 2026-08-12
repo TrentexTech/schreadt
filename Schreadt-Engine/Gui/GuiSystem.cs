@@ -9,6 +9,7 @@ public sealed class GuiSystem
 
     private readonly List<IGuiElement> _elements = [];
     private readonly List<GuiLayer> _layers = [];
+    private readonly HashSet<GuiLayer> _transitionBlockedLayers = [];
     private readonly float _referenceHeight;
     private GuiControl? _capturedControl;
     private GuiControl? _hoveredControl;
@@ -92,9 +93,26 @@ public sealed class GuiSystem
         return true;
     }
 
-    public void Update(IInputState input)
+    public void Update(IInputState input) => Update(input, 0.0);
+
+    /// <summary>
+    /// Advances screen transitions using real, unscaled frame time and then processes GUI input.
+    /// </summary>
+    public void Update(IInputState input, double unscaledDeltaTime)
     {
         ArgumentNullException.ThrowIfNull(input);
+        if (!double.IsFinite(unscaledDeltaTime) || unscaledDeltaTime < 0.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(unscaledDeltaTime),
+                "GUI delta time must be finite and non-negative.");
+
+        _transitionBlockedLayers.Clear();
+        foreach (var layer in _layers.ToArray())
+        {
+            if (!_layers.Contains(layer)) continue;
+            if (layer.Screens.IsTransitioning) _transitionBlockedLayers.Add(layer);
+            layer.Screens.UpdateTransition(unscaledDeltaTime);
+        }
 
         if (input.WasKeyPressed(InputKey.Escape)) DismissTopScreenOnEscape();
 
@@ -144,7 +162,16 @@ public sealed class GuiSystem
         foreach (var layer in _layers.ToArray())
         {
             if (!layer.Visible || !_layers.Contains(layer)) continue;
-            foreach (var root in layer.EnumerateRoots().ToArray()) RenderRoot(root, viewportSize, scaledRenderer);
+            foreach (var root in layer.Elements.ToArray()) RenderRoot(root, viewportSize, scaledRenderer);
+            foreach (var screen in layer.Screens.Screens.ToArray())
+            {
+                var presentation = layer.Screens.GetPresentation(screen, viewportSize);
+                RenderRoot(screen.Root, viewportSize, scaledRenderer, presentation);
+            }
+
+            var overlayColor = layer.Screens.GetTransitionOverlay(viewportSize);
+            if (overlayColor.W > 0.0f)
+                scaledRenderer.DrawScreenRectangle(Vector2D<float>.Zero, viewportSize, overlayColor);
         }
 
         foreach (var element in _elements.ToArray()) RenderRoot(element, viewportSize, scaledRenderer);
@@ -188,16 +215,33 @@ public sealed class GuiSystem
     private static void RenderRoot(
         IGuiElement element,
         Vector2D<float> viewportSize,
-        IRenderContext2D renderer)
+        IRenderContext2D renderer,
+        GuiScreenPresentation? presentation = null)
     {
         if (!element.Visible) return;
+
+        var screenPresentation = presentation ?? GuiScreenPresentation.Default;
+        if (screenPresentation.Opacity <= 0.0f) return;
+
+        var arrangedPosition = element.Position + screenPresentation.Offset;
 
         var availableSize = new Vector2D<float>(
             Math.Max(0.0f, viewportSize.X - element.Position.X),
             Math.Max(0.0f, viewportSize.Y - element.Position.Y));
         element.Measure(availableSize);
-        element.Arrange(new GuiRectangle(element.Position, element.DesiredSize));
-        element.Render(renderer);
+        element.Arrange(new GuiRectangle(arrangedPosition, element.DesiredSize));
+        try
+        {
+            var renderContext = screenPresentation.Opacity >= 1.0f
+                ? renderer
+                : new OpacityGuiRenderContext(renderer, screenPresentation.Opacity);
+            element.Render(renderContext);
+        }
+        finally
+        {
+            if (screenPresentation.Offset != Vector2D<float>.Zero)
+                element.Arrange(new GuiRectangle(element.Position, element.DesiredSize));
+        }
     }
 
     internal float GetRenderScale(Vector2D<int> viewportSize)
@@ -232,8 +276,10 @@ public sealed class GuiSystem
         return null;
     }
 
-    private static ScreenSearchResult FindScreenControl(GuiLayer layer, Vector2D<float> pointerPosition)
+    private ScreenSearchResult FindScreenControl(GuiLayer layer, Vector2D<float> pointerPosition)
     {
+        if (IsTransitionInputBlocked(layer)) return new ScreenSearchResult(null, true);
+
         for (var index = layer.Screens.Screens.Count - 1; index >= 0; index--)
         {
             var screen = layer.Screens.Screens[index];
@@ -278,6 +324,12 @@ public sealed class GuiSystem
         {
             if (!layer.Visible || !layer.InputEnabled) continue;
 
+            if (IsTransitionInputBlocked(layer))
+            {
+                if (layer.Screens.Screens.Any(screen => IsVisibleDescendant(screen.Root, control))) return false;
+                continue;
+            }
+
             var blocked = false;
             for (var index = layer.Screens.Screens.Count - 1; index >= 0; index--)
             {
@@ -298,6 +350,7 @@ public sealed class GuiSystem
         {
             var layer = _layers[index];
             if (!layer.Visible || !layer.InputEnabled) continue;
+            if (IsTransitionInputBlocked(layer)) return;
             var screen = layer.Screens.Top;
             if (screen is null) continue;
             if (screen.DismissOnEscape) layer.Screens.Pop();
@@ -319,6 +372,9 @@ public sealed class GuiSystem
         return root is GuiPanel panel &&
                panel.Children.Any(child => IsVisibleDescendant(child, candidate));
     }
+
+    private bool IsTransitionInputBlocked(GuiLayer layer) =>
+        layer.Screens.IsTransitioning || _transitionBlockedLayers.Contains(layer);
 
     private readonly record struct ScreenSearchResult(GuiControl? Control, bool BlocksInputBelow);
 
@@ -368,5 +424,56 @@ public sealed class GuiSystem
             Vector2D<float> size,
             Vector4D<float> color) =>
             inner.DrawScreenRectangle(position * scale, size * scale, color);
+    }
+
+    private sealed class OpacityGuiRenderContext(IRenderContext2D inner, float opacity) : IRenderContext2D
+    {
+        public Vector2D<int> ViewportSize => inner.ViewportSize;
+
+        public void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color) =>
+            inner.DrawCircle(center, radius, Apply(color));
+
+        public void DrawRectangle(
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> color,
+            double rotationRadians = 0.0) =>
+            inner.DrawRectangle(center, size, Apply(color), rotationRadians);
+
+        public void DrawPolygon(
+            Vector2D<double> center,
+            IReadOnlyList<Vector2D<double>> localVertices,
+            Vector2D<double> polygonScale,
+            double rotationRadians,
+            Vector4D<float> color) =>
+            inner.DrawPolygon(center, localVertices, polygonScale, rotationRadians, Apply(color));
+
+        public void DrawSprite(
+            string imageAssetId,
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> tint,
+            double rotationRadians = 0.0,
+            TextureRegion? region = null,
+            TextureSampling sampling = TextureSampling.Linear) =>
+            inner.DrawSprite(imageAssetId, center, size, Apply(tint), rotationRadians, region, sampling);
+
+        public void DrawText(
+            string text,
+            Vector2D<float> position,
+            float textScale,
+            Vector4D<float> color,
+            Vector4D<float> backgroundColor,
+            float padding = 0.0f) =>
+            inner.DrawText(text, position, textScale, Apply(color), Apply(backgroundColor), padding);
+
+        public void DrawScreenRectangle(
+            Vector2D<float> position,
+            Vector2D<float> size,
+            Vector4D<float> color) =>
+            inner.DrawScreenRectangle(position, size, Apply(color));
+
+        private Vector4D<float> Apply(Vector4D<float> color) =>
+            new(color.X, color.Y, color.Z, color.W * opacity);
     }
 }

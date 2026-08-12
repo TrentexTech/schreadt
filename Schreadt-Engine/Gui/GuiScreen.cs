@@ -1,4 +1,5 @@
 using Schreadt_Engine.Core;
+using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Gui;
 
@@ -33,6 +34,12 @@ public sealed class GuiScreen
 
     public bool DismissOnEscape { get; set; }
 
+    /// <summary>Optional transition used by <see cref="GuiScreenStack.Push(GuiScreen)"/>.</summary>
+    public GuiScreenTransition? OpeningTransition { get; set; }
+
+    /// <summary>Optional transition used by <see cref="GuiScreenStack.Pop()"/>.</summary>
+    public GuiScreenTransition? ClosingTransition { get; set; }
+
     public bool IsOpen { get; internal set; }
 
     public event Action<GuiScreen>? Opened;
@@ -60,6 +67,8 @@ public sealed class GuiScreenStack
     private readonly List<GuiScreen> _screens = [];
     private RuntimeController? _runtime;
     private bool _pauseRequested;
+    private bool _preparingTransition;
+    private ActiveGuiScreenTransition? _activeTransition;
 
     internal GuiScreenStack(GuiLayer layer)
     {
@@ -70,11 +79,35 @@ public sealed class GuiScreenStack
 
     public GuiScreen? Top => _screens.Count == 0 ? null : _screens[^1];
 
+    public bool IsTransitioning => _activeTransition is not null;
+
     public event Action<GuiScreen>? ScreenPushed;
 
     public event Action<GuiScreen>? ScreenRemoved;
 
+    public event Action? TransitionStarted;
+
+    public event Action? TransitionCompleted;
+
     public GuiScreen Push(GuiScreen screen)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+        if (screen.OpeningTransition is not null) return Push(screen, screen.OpeningTransition);
+        EnsureNotTransitioning();
+        return PushCore(screen);
+    }
+
+    public GuiScreen Push(GuiScreen screen, GuiScreenTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        EnsureNotTransitioning();
+        var outgoing = Top;
+        var incoming = PushForTransition(screen);
+        StartTransition(outgoing, incoming, transition, isOpening: true, completion: null);
+        return incoming;
+    }
+
+    private GuiScreen PushCore(GuiScreen screen)
     {
         ArgumentNullException.ThrowIfNull(screen);
         if (screen.IsOpen || _screens.Contains(screen))
@@ -104,15 +137,53 @@ public sealed class GuiScreenStack
 
     public GuiScreen? Pop()
     {
+        if (Top?.ClosingTransition is { } transition) return Pop(transition);
+        EnsureNotTransitioning();
         if (_screens.Count == 0) return null;
         var screen = _screens[^1];
         RemoveAt(_screens.Count - 1, screen);
         return screen;
     }
 
+    public GuiScreen? Pop(GuiScreenTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        EnsureNotTransitioning();
+        if (_screens.Count == 0) return null;
+
+        var outgoing = _screens[^1];
+        var incoming = _screens.Count > 1 ? _screens[^2] : null;
+        StartTransition(
+            outgoing,
+            incoming,
+            transition,
+            isOpening: false,
+            () => RemoveAt(_screens.IndexOf(outgoing), outgoing));
+        return outgoing;
+    }
+
+    public GuiScreen ReplaceTop(GuiScreen screen, GuiScreenTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(screen);
+        ArgumentNullException.ThrowIfNull(transition);
+        EnsureNotTransitioning();
+        if (_screens.Count == 0) return Push(screen, transition);
+
+        var outgoing = _screens[^1];
+        var incoming = PushForTransition(screen);
+        StartTransition(
+            outgoing,
+            incoming,
+            transition,
+            isOpening: true,
+            () => RemoveAt(_screens.IndexOf(outgoing), outgoing));
+        return incoming;
+    }
+
     public bool Remove(GuiScreen screen)
     {
         ArgumentNullException.ThrowIfNull(screen);
+        EnsureNotTransitioning();
         var index = _screens.IndexOf(screen);
         if (index < 0) return false;
         RemoveAt(index, screen);
@@ -122,6 +193,7 @@ public sealed class GuiScreenStack
     public bool Remove(string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        EnsureNotTransitioning();
         var index = _screens.FindLastIndex(screen => string.Equals(screen.Name, name.Trim(), StringComparison.Ordinal));
         if (index < 0) return false;
         RemoveAt(index, _screens[index]);
@@ -136,6 +208,11 @@ public sealed class GuiScreenStack
 
     public void Clear()
     {
+        if (_preparingTransition)
+            throw new InvalidOperationException("The GUI screen stack cannot be cleared from a transition opening callback.");
+        if (_activeTransition is not null)
+            EngineLog.Debug("Cancelled the active GUI screen transition while clearing its stack.", "GUI");
+        _activeTransition = null;
         for (var index = _screens.Count - 1; index >= 0; index--)
         {
             var screen = _screens[index];
@@ -158,6 +235,50 @@ public sealed class GuiScreenStack
         UpdateSimulationPause();
     }
 
+    internal void UpdateTransition(double unscaledDeltaTime)
+    {
+        if (!double.IsFinite(unscaledDeltaTime) || unscaledDeltaTime < 0.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(unscaledDeltaTime),
+                "Transition delta time must be finite and non-negative.");
+
+        var active = _activeTransition;
+        if (active is null || unscaledDeltaTime == 0.0) return;
+
+        active.Elapsed = Math.Min(active.Transition.Duration, active.Elapsed + unscaledDeltaTime);
+        if (active.Elapsed < active.Transition.Duration) return;
+
+        _activeTransition = null;
+        EngineLog.Debug(
+            $"Completed {active.Transition.GetType().Name} from " +
+            $"'{active.Outgoing?.Name ?? "none"}' to '{active.Incoming?.Name ?? "none"}'.",
+            "GUI");
+        active.Completion?.Invoke();
+        TransitionCompleted?.Invoke();
+    }
+
+    internal GuiScreenPresentation GetPresentation(GuiScreen screen, Vector2D<float> viewportSize)
+    {
+        var active = _activeTransition;
+        if (active is null) return GuiScreenPresentation.Default;
+
+        var progress = active.Elapsed / active.Transition.Duration;
+        var frame = active.Transition.CreateFrame(progress, active.IsOpening, viewportSize);
+        if (ReferenceEquals(screen, active.Outgoing))
+            return new GuiScreenPresentation(frame.OutgoingOpacity, frame.OutgoingOffset);
+        if (ReferenceEquals(screen, active.Incoming))
+            return new GuiScreenPresentation(frame.IncomingOpacity, frame.IncomingOffset);
+        return GuiScreenPresentation.Default;
+    }
+
+    internal Vector4D<float> GetTransitionOverlay(Vector2D<float> viewportSize)
+    {
+        var active = _activeTransition;
+        if (active is null) return Vector4D<float>.Zero;
+        var progress = active.Elapsed / active.Transition.Duration;
+        return active.Transition.CreateFrame(progress, active.IsOpening, viewportSize).OverlayColor;
+    }
+
     private void RemoveAt(int index, GuiScreen screen)
     {
         _layer.ReleaseInteraction(screen.Root);
@@ -167,6 +288,46 @@ public sealed class GuiScreenStack
         screen.NotifyClosed();
         ScreenRemoved?.Invoke(screen);
         UpdateSimulationPause();
+    }
+
+    private void StartTransition(
+        GuiScreen? outgoing,
+        GuiScreen? incoming,
+        GuiScreenTransition transition,
+        bool isOpening,
+        Action? completion)
+    {
+        foreach (var screen in _screens) _layer.ReleaseInteraction(screen.Root);
+        _activeTransition = new ActiveGuiScreenTransition(
+            outgoing,
+            incoming,
+            transition,
+            isOpening,
+            completion);
+        EngineLog.Debug(
+            $"Started {transition.GetType().Name} from '{outgoing?.Name ?? "none"}' to " +
+            $"'{incoming?.Name ?? "none"}' ({transition.Duration:G4} s).",
+            "GUI");
+        TransitionStarted?.Invoke();
+    }
+
+    private GuiScreen PushForTransition(GuiScreen screen)
+    {
+        _preparingTransition = true;
+        try
+        {
+            return PushCore(screen);
+        }
+        finally
+        {
+            _preparingTransition = false;
+        }
+    }
+
+    private void EnsureNotTransitioning()
+    {
+        if (_activeTransition is not null || _preparingTransition)
+            throw new InvalidOperationException("The GUI screen stack is already running a transition.");
     }
 
     private void OnPausesSimulationChanged(GuiScreen screen)
@@ -196,4 +357,24 @@ public sealed class GuiScreenStack
         if (_pauseRequested && _runtime is not null) _runtime.ReleasePauseRequest();
         _pauseRequested = false;
     }
+
+    private sealed class ActiveGuiScreenTransition(
+        GuiScreen? outgoing,
+        GuiScreen? incoming,
+        GuiScreenTransition transition,
+        bool isOpening,
+        Action? completion)
+    {
+        internal GuiScreen? Outgoing { get; } = outgoing;
+        internal GuiScreen? Incoming { get; } = incoming;
+        internal GuiScreenTransition Transition { get; } = transition;
+        internal bool IsOpening { get; } = isOpening;
+        internal Action? Completion { get; } = completion;
+        internal double Elapsed { get; set; }
+    }
+}
+
+internal readonly record struct GuiScreenPresentation(float Opacity, Vector2D<float> Offset)
+{
+    internal static GuiScreenPresentation Default { get; } = new(1.0f, Vector2D<float>.Zero);
 }

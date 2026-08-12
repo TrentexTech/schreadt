@@ -6,6 +6,7 @@ using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
 using Schreadt_Engine.Component.PreFab;
 using Schreadt_Engine.Core;
+using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Tests.Examples;
@@ -106,6 +107,21 @@ public sealed class PlatformerTweenTests
 
         Assert.Equal(2.0, light.Position.X, 10);
         Assert.Equal(3.08, light.Position.Y, 10);
+    }
+
+    [Fact]
+    public void PlatformerScreens_UseEngineScreenTransitions()
+    {
+        var scene = new Scene("screen-transition-test", new EmptySceneLogic());
+
+        var pause = PlatformerScreens.CreatePauseScreen(scene);
+        PlatformerScreens.ShowVictory(scene, 3, 0);
+
+        var slide = Assert.IsType<SlideScreenTransition>(pause.OpeningTransition);
+        Assert.Same(pause.OpeningTransition, pause.ClosingTransition);
+        Assert.Equal(GuiSlideDirection.Down, slide.Direction);
+        Assert.IsType<FadeToColorScreenTransition>(scene.Screens.Top!.OpeningTransition);
+        Assert.True(scene.Screens.IsTransitioning);
     }
 
     [Fact]
