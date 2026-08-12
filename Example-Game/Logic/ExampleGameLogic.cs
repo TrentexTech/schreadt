@@ -19,6 +19,7 @@ public sealed class ExampleGameLogic : GameLogic
         0.55,
         TweenEasings.SineInOut);
     private readonly IInputService? _inputOverride;
+    private ExampleLevelSelector? _levelSelector;
 
     private IInputService Input => _inputOverride ?? Context.Input;
 
@@ -55,6 +56,7 @@ public sealed class ExampleGameLogic : GameLogic
         title.Color = new Vector4D<float>(1f, 0.86f, 0.26f, 1f);
         help.AddLabel("A/D OR ARROWS: MOVE\nSPACE/W/UP: JUMP\nR: RESTART   P: PAUSE").Scale = 1.25f;
         help.AddButton("PAUSE").Clicked += (_, _) => TogglePause();
+        _levelSelector = new ExampleLevelSelector(Reality.Scenes, Context.Gui);
     }
 
     public override void Update(double dt)
@@ -66,6 +68,13 @@ public sealed class ExampleGameLogic : GameLogic
         }
 
         if (Input.WasActionPressed(ExampleInputActions.Pause)) TogglePause();
+        _levelSelector?.Update();
+    }
+
+    public override void Shutdown()
+    {
+        _levelSelector?.Dispose();
+        _levelSelector = null;
     }
 
     private void TogglePause()

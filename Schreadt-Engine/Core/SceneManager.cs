@@ -30,6 +30,9 @@ public sealed class SceneManager
 
     public bool IsTransitioning => _activeTransition is not null;
 
+    /// <summary>Whether a scene load is queued for the next safe scene-update boundary.</summary>
+    public bool HasPendingSceneLoad => _pendingSceneLoad is not null;
+
     public SceneTransition? ActiveTransition => _activeTransition?.Transition;
 
     public string? TransitionTargetSceneName => _activeTransition?.TargetSceneName;
