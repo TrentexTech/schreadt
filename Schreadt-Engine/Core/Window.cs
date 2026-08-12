@@ -215,22 +215,14 @@ public sealed unsafe class Window : IWindowController
     {
         EngineLog.Information("Main loop started.", "Window");
         _frameDispatcher = new WindowFrameDispatcher(Environment.CurrentManagedThreadId);
-        try
+        RegisterWindowEventWatch();
+        while (!_closeRequested)
         {
-            RegisterWindowEventWatch();
-            while (!_closeRequested)
-            {
-                PollEvents();
-                ThrowEventWatchFailure();
-                if (_closeRequested) break;
+            PollEvents();
+            ThrowEventWatchFailure();
+            if (_closeRequested) break;
 
-                _frameDispatcher.TryDispatch(Environment.CurrentManagedThreadId, RunFrame);
-            }
-        }
-        finally
-        {
-            UnregisterWindowEventWatch();
-            _frameDispatcher = null;
+            _frameDispatcher.TryDispatch(Environment.CurrentManagedThreadId, RunFrame);
         }
 
         EngineLog.Information($"Main loop exited after {_app.Runtime.FrameCount} frame(s).", "Window");
@@ -408,8 +400,14 @@ public sealed unsafe class Window : IWindowController
     private void UnregisterWindowEventWatch()
     {
         if (!_eventWatchRegistered || _sdl is null) return;
-        _sdl.DelEventWatch(_windowEventWatch, null);
-        _eventWatchRegistered = false;
+        try
+        {
+            _sdl.DelEventWatch(_windowEventWatch, null);
+        }
+        finally
+        {
+            _eventWatchRegistered = false;
+        }
     }
 
     private void ThrowEventWatchFailure()
@@ -424,41 +422,78 @@ public sealed unsafe class Window : IWindowController
         _closeRequested = true;
         EngineLog.Information("Window is closing.", "Window");
 
-        try
+        var failures = BestEffortShutdown.Run(
+        [
+            new ShutdownStage("event-watcher removal", UnregisterWindowEventWatch),
+            new ShutdownStage("application shutdown", _app.Shutdown),
+            new ShutdownStage("text-input shutdown", StopTextInput),
+            new ShutdownStage("input disposal", _app.Input.Dispose),
+            new ShutdownStage("renderer disposal", DisposeRenderer),
+            new ShutdownStage("OpenGL-context deletion", DeleteGlContext),
+            new ShutdownStage("SDL-window destruction", DestroySdlWindow),
+            new ShutdownStage("SDL shutdown", QuitSdl),
+            new ShutdownStage("SDL disposal", DisposeSdl)
+        ]);
+
+        _loaded = false;
+        _windowId = 0;
+        _frameDispatcher = null;
+        _eventWatchFailure = null;
+
+        foreach (var failure in failures)
         {
-            UnregisterWindowEventWatch();
-            _app.Shutdown();
+            EngineLog.Error(
+                $"Window shutdown stage '{failure.Stage}' failed; continuing cleanup.",
+                failure.Exception,
+                "Window");
         }
-        finally
-        {
-            if (_sdl is not null && _sdlInitialized) _sdl.StopTextInput();
-            _app.Input.Dispose();
-            _renderer?.Dispose();
-            _renderer = null;
 
-            if (_sdl is not null && _glContext != null)
-            {
-                _sdl.GLDeleteContext(_glContext);
-                _glContext = null;
-            }
+        EngineLog.Information(
+            failures.Count == 0
+                ? "Window and SDL resources closed."
+                : $"Window and SDL cleanup completed with {failures.Count} failure(s).",
+            "Window");
+        BestEffortShutdown.ThrowIfFailed(failures);
+    }
 
-            if (_sdl is not null && _window != null)
-            {
-                _sdl.DestroyWindow(_window);
-                _window = null;
-            }
+    private void StopTextInput()
+    {
+        if (_sdl is not null && _sdlInitialized) _sdl.StopTextInput();
+    }
 
-            if (_sdl is not null && _sdlInitialized)
-            {
-                _sdl.Quit();
-                _sdlInitialized = false;
-            }
+    private void DisposeRenderer()
+    {
+        var renderer = _renderer;
+        _renderer = null;
+        renderer?.Dispose();
+    }
 
-            _sdl?.Dispose();
-            _sdl = null;
-            _loaded = false;
-            EngineLog.Information("Window and SDL resources closed.", "Window");
-        }
+    private void DeleteGlContext()
+    {
+        var context = _glContext;
+        _glContext = null;
+        if (_sdl is not null && context != null) _sdl.GLDeleteContext(context);
+    }
+
+    private void DestroySdlWindow()
+    {
+        var window = _window;
+        _window = null;
+        if (_sdl is not null && window != null) _sdl.DestroyWindow(window);
+    }
+
+    private void QuitSdl()
+    {
+        if (_sdl is null || !_sdlInitialized) return;
+        _sdlInitialized = false;
+        _sdl.Quit();
+    }
+
+    private void DisposeSdl()
+    {
+        var sdl = _sdl;
+        _sdl = null;
+        sdl?.Dispose();
     }
 
     private void ApplyDisplayState(
