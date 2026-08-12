@@ -41,7 +41,7 @@ public sealed class BackgroundTests
 
         var view = camera.CreateBackgroundView(2.0, background);
 
-        Assert.Equal(new Vector2D<double>(4.0, 0.0), view.Position);
+        Assert.Equal(new Vector2D<double>(4.0, 0.0), view.Center);
         Assert.Equal(2.0, view.OrthographicSize);
         Assert.Equal(2.0, view.AspectRatio);
         Assert.Equal(0.35, view.RotationRadians, 10);
@@ -161,7 +161,7 @@ public sealed class BackgroundTests
             background.Layers.Select(layer => layer.ParallaxFactor));
         var camera = new Camera { Position = new Vector2D<double>(10.0, 0.0) };
         var layerCenters = background.Layers
-            .Select(layer => camera.CreateBackgroundView(1.0, layer).Position.X)
+            .Select(layer => camera.CreateBackgroundView(1.0, layer).Center.X)
             .ToArray();
         var expectedCenters = new[] { 0.0, 0.6, 1.6, 3.4, 5.2 };
         for (var index = 0; index < expectedCenters.Length; index++)

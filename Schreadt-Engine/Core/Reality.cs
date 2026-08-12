@@ -6,6 +6,7 @@ namespace Schreadt_Engine.Core;
 
 public class Reality : IUpdateable
 {
+    private readonly FrameComposer2D _frameComposer = new();
     private bool _initialized;
     private IEngineContext? _context;
 
@@ -79,9 +80,9 @@ public class Reality : IUpdateable
         MainCamera.Update(dt);
     }
 
-    public void Render(IRenderer2D renderer, GuiSystem? gui = null)
+    public void Render(IFrameRenderer2D renderer, GuiSystem? gui = null)
     {
-        renderer.Render(MainCamera, Scene, gui);
+        _frameComposer.ComposeFrame(renderer, MainCamera, Scene, gui);
     }
 
     internal void Shutdown()

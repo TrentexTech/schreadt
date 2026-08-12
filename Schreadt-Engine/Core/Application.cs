@@ -85,7 +85,7 @@ internal class Application
         }
     }
 
-    internal void Render(IRenderer2D renderer, double frameTime)
+    internal void Render(IFrameRenderer2D renderer, double frameTime)
     {
         if (_shutdown || Window.IsCloseRequested) return;
 

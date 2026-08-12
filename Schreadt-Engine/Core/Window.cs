@@ -14,7 +14,7 @@ public sealed unsafe class Window : IWindowController
     private readonly Application _app;
     private readonly IAssetProvider _assets;
     private readonly PfnEventFilter _windowEventWatch;
-    private IRenderer2D? _renderer;
+    private IFrameRenderer2D? _renderer;
     private SdlApi? _sdl;
     private SdlWindow* _window;
     private void* _glContext;

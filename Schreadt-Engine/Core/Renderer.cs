@@ -1,15 +1,14 @@
 using Schreadt_Engine.Asset;
-using Schreadt_Engine.Component;
 using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 
 namespace Schreadt_Engine.Core;
 
-public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
+public sealed class Renderer : IFrameRenderer2D
 {
     private const int CircleSegmentCount = 96;
-    private static readonly Vector4D<float> SceneClearColor = new(0.055f, 0.065f, 0.09f, 1.0f);
+    private static readonly Vector4D<float> FrameClearColor = new(0.055f, 0.065f, 0.09f, 1.0f);
     private static readonly Vector2D<double>[] RectangleVertices =
     [
         new(-0.5, 0.5),
@@ -111,7 +110,7 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
     private int _viewportY;
     private int _viewportWidth = 1;
     private int _viewportHeight = 1;
-    private CameraView _cameraView;
+    private CameraView2D _cameraView;
     private bool _renderingFrame;
     private bool _disposed;
     private TextureSampling? _pixelTextureSampling;
@@ -122,28 +121,10 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
     private int _frameVertexCount;
     private int _frameTextureUploadCount;
     private long _frameTextureUploadByteCount;
-    private readonly HashSet<IBackground2D> _activeBackgrounds = new(ReferenceEqualityComparer.Instance);
-    private Camera? _backgroundCamera;
-    private double _backgroundAspectRatio;
 
     public Vector2D<int> ViewportOffset => new(_viewportX, _viewportY);
 
     public Vector2D<int> ViewportSize => new(_viewportWidth, _viewportHeight);
-
-    public BackgroundView2D View
-    {
-        get
-        {
-            var (minimum, maximum) = _cameraView.GetVisibleBounds();
-            return new BackgroundView2D(
-                _cameraView.Position,
-                _cameraView.RotationRadians,
-                _cameraView.OrthographicSize,
-                _cameraView.AspectRatio,
-                minimum,
-                maximum);
-        }
-    }
 
     public RenderStatistics Statistics { get; private set; }
 
@@ -222,15 +203,13 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
             "Renderer");
     }
 
-    public void Render(Camera camera, GameObject obj, GuiSystem? gui = null)
+    public void BeginFrame(CameraView2D view)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(camera);
-        ArgumentNullException.ThrowIfNull(obj);
+        if (_renderingFrame) throw new InvalidOperationException("A renderer frame is already active.");
+        ValidateView(view);
 
-        var aspectRatio = (double)_viewportWidth / _viewportHeight;
-        var sceneView = camera.CreateView(aspectRatio);
-        _cameraView = sceneView;
+        _cameraView = view;
         _frameDrawCallCount = 0;
         _framePrimitiveCount = 0;
         _frameVertexCount = 0;
@@ -241,37 +220,35 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
         try
         {
             _gl.Clear(ClearBufferMask.ColorBufferBit);
-            DrawScreenRectangle(Vector2D<float>.Zero, new Vector2D<float>(_viewportWidth, _viewportHeight), SceneClearColor);
-            if (obj is Scene { Background: { Enabled: true } background })
-            {
-                _backgroundCamera = camera;
-                _backgroundAspectRatio = aspectRatio;
-                try
-                {
-                    RenderBackground(background);
-                }
-                finally
-                {
-                    _activeBackgrounds.Clear();
-                    _backgroundCamera = null;
-                    _backgroundAspectRatio = 0.0;
-                    _cameraView = sceneView;
-                }
-            }
-            obj.Render(this);
-            if (obj is Scene debugScene) debugScene.Collisions.DrawDiagnostics(this);
-            gui?.Render(this);
+            DrawScreenRectangle(Vector2D<float>.Zero, new Vector2D<float>(_viewportWidth, _viewportHeight), FrameClearColor);
         }
-        finally
+        catch
         {
             _renderingFrame = false;
-            Statistics = new RenderStatistics(
-                _frameDrawCallCount,
-                _framePrimitiveCount,
-                _frameVertexCount,
-                _frameTextureUploadCount,
-                _frameTextureUploadByteCount);
+            throw;
         }
+    }
+
+    public void SetView(CameraView2D view)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_renderingFrame) throw new InvalidOperationException("Camera views can only change during an active frame.");
+        ValidateView(view);
+        _cameraView = view;
+    }
+
+    public void EndFrame()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_renderingFrame) throw new InvalidOperationException("There is no active renderer frame to end.");
+
+        _renderingFrame = false;
+        Statistics = new RenderStatistics(
+            _frameDrawCallCount,
+            _framePrimitiveCount,
+            _frameVertexCount,
+            _frameTextureUploadCount,
+            _frameTextureUploadByteCount);
     }
 
     public void Resize(int width, int height)
@@ -326,6 +303,17 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
             new Vector2D<int>(viewportWidth, viewportHeight));
     }
 
+    private static void ValidateView(CameraView2D view)
+    {
+        if (!double.IsFinite(view.Center.X) || !double.IsFinite(view.Center.Y) ||
+            !double.IsFinite(view.OrthographicSize) || view.OrthographicSize <= 0.0 ||
+            !double.IsFinite(view.AspectRatio) || view.AspectRatio <= 0.0 ||
+            !double.IsFinite(view.RotationRadians))
+        {
+            throw new ArgumentException("The camera view must be initialized with finite, positive dimensions.", nameof(view));
+        }
+    }
+
     public void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -365,29 +353,6 @@ public sealed class Renderer : IRenderer2D, IBackgroundRenderContext2D
         }
 
         DrawLineBatch(vertices, color);
-    }
-
-    public void RenderBackground(IBackground2D background)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(background);
-        if (!_renderingFrame || _backgroundCamera is null)
-            throw new InvalidOperationException("Child backgrounds can only be rendered while rendering a scene background.");
-        if (!background.Enabled) return;
-        if (!_activeBackgrounds.Add(background))
-            throw new InvalidOperationException("A cycle was detected while rendering layered backgrounds.");
-
-        var previousView = _cameraView;
-        try
-        {
-            _cameraView = _backgroundCamera.CreateBackgroundView(_backgroundAspectRatio, background);
-            background.Render(this);
-        }
-        finally
-        {
-            _cameraView = previousView;
-            _activeBackgrounds.Remove(background);
-        }
     }
 
     public void DrawRectangle(

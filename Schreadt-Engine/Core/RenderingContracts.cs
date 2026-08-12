@@ -1,5 +1,4 @@
 using Schreadt_Engine.Component;
-using Schreadt_Engine.Gui;
 using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Core;
@@ -100,15 +99,18 @@ public interface IPixelRenderContext2D : IRenderContext2D
 }
 
 /// <summary>
-/// Owns complete camera-based frames in addition to accepting draw commands.
+/// Owns drawing state and frame boundaries without traversing engine domain objects.
 /// </summary>
-public interface IRenderer2D : IPixelRenderContext2D, IDisposable
+public interface IFrameRenderer2D : IPixelRenderContext2D, IDisposable
 {
     /// <summary>Top-left framebuffer offset of the aspect-ratio-constrained viewport.</summary>
     Vector2D<int> ViewportOffset { get; }
 
     RenderStatistics Statistics { get; }
 
-    void Render(Camera camera, GameObject obj, GuiSystem? gui = null);
+    void BeginFrame(CameraView2D view);
+    void SetView(CameraView2D view);
+    void DrawLines(IReadOnlyList<LineSegment2D> lines, Vector4D<float> color);
+    void EndFrame();
     void Resize(int width, int height);
 }
