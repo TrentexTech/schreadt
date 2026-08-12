@@ -261,7 +261,6 @@ internal sealed class StarToken : Actor
 internal sealed class GoalPortal : Actor
 {
     private double _pulse;
-    private double _orbitAngle;
     internal CircleCollider2D Collider { get; }
 
     internal GoalPortal()
@@ -274,13 +273,27 @@ internal sealed class GoalPortal : Actor
         });
         var tweens = AddComponent(new TweenPlayer());
 
+        var orbitPivot = new PortalOrbitPivot();
+        orbitPivot.AddChild(new Circle
+        {
+            Radius = 0.055,
+            Color = new Vector4D<float>(1f, 0.9f, 0.35f, 1f),
+            RenderLayer = 21,
+            Transform = { LocalPosition = new Vector2D<double>(0.08, 0.0) }
+        });
+        AddChild(orbitPivot);
+
         var pulse = Tweens.To(() => _pulse, value => _pulse = value, 0.025, 0.55);
         pulse.Easing = TweenEasings.SineInOut;
         pulse.LoopMode = TweenLoopMode.Yoyo;
         pulse.RepeatCount = Tween.RepeatForever;
         tweens.Play(pulse);
 
-        var orbit = Tweens.To(() => _orbitAngle, value => _orbitAngle = value, Math.Tau, 3.0);
+        var orbit = Tweens.To(
+            () => orbitPivot.Transform.LocalRotation,
+            value => orbitPivot.Transform.LocalRotation = value,
+            Math.Tau,
+            3.0);
         orbit.RepeatCount = Tween.RepeatForever;
         tweens.Play(orbit);
     }
@@ -290,9 +303,9 @@ internal sealed class GoalPortal : Actor
         renderer.DrawCircle(Position, 0.5 + _pulse, new Vector4D<float>(0.35f, 0.95f, 1f, 0.2f));
         renderer.DrawCircle(Position, 0.39 + _pulse, new Vector4D<float>(0.26f, 0.82f, 1f, 0.8f));
         renderer.DrawCircle(Position, 0.27, new Vector4D<float>(0.06f, 0.12f, 0.3f, 1f));
-        renderer.DrawCircle(Position + new Vector2D<double>(0.08 * Math.Sin(_orbitAngle), 0.08 * Math.Cos(_orbitAngle)),
-            0.055, new Vector4D<float>(1f, 0.9f, 0.35f, 1f));
     }
+
+    private sealed class PortalOrbitPivot : GameObject;
 }
 
 internal sealed class LaserScanner : Actor

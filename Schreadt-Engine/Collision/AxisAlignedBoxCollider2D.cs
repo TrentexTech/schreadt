@@ -1,3 +1,4 @@
+using Schreadt_Engine.Component;
 using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Collision;
@@ -42,7 +43,12 @@ public sealed class AxisAlignedBoxCollider2D : Collider2D
         }
     }
 
-    public override Vector2D<double> Center => Owner.Position + Offset;
+    /// <summary>
+    /// World-space center. Owner and ancestor rotation affect the offset, but this collider
+    /// remains axis-aligned and transform scale is intentionally ignored by physics geometry.
+    /// </summary>
+    public override Vector2D<double> Center =>
+        Owner.Position + Transform2D.Rotate(Offset, Owner.Transform.WorldRotation);
 
     public Vector2D<double> Minimum => Center - HalfSize;
 

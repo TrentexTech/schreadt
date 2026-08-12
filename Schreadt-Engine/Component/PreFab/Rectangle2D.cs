@@ -7,7 +7,6 @@ namespace Schreadt_Engine.Component.PreFab;
 public class Rectangle2D : Actor
 {
     private Vector2D<double> _size = new(0.7, 0.7);
-    private double _rotationRadians;
 
     public Vector2D<double> Size
     {
@@ -22,13 +21,8 @@ public class Rectangle2D : Actor
 
     public double RotationRadians
     {
-        get => _rotationRadians;
-        set
-        {
-            if (!double.IsFinite(value))
-                throw new ArgumentOutOfRangeException(nameof(value), "Rectangle rotation must be finite.");
-            _rotationRadians = value;
-        }
+        get => Transform.WorldRotation;
+        set => Transform.SetWorldRotation(value);
     }
 
     public Vector4D<float> Color { get; set; } = new(0.95f, 0.45f, 0.2f, 1.0f);
@@ -39,6 +33,11 @@ public class Rectangle2D : Actor
 
     protected override void OnRender(IRenderContext2D renderer)
     {
-        renderer.DrawRectangle(Position, Size, Color, RotationRadians);
+        var worldScale = Transform.WorldScale;
+        renderer.DrawRectangle(
+            Position,
+            new Vector2D<double>(Size.X * worldScale.X, Size.Y * worldScale.Y),
+            Color,
+            RotationRadians);
     }
 }

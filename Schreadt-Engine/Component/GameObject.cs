@@ -10,9 +10,13 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     private GameObject? _parent;
     private Scene? _scene;
 
-    protected Vector2D<double> _position;
     private readonly List<GameObject> _children = [];
     private readonly List<GameComponent> _components = [];
+
+    protected GameObject()
+    {
+        Transform = new Transform2D(this);
+    }
 
     /// <summary>
     /// Whether this object is locally active. An inactive object also suppresses its descendants.
@@ -60,10 +64,13 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
 
     public IReadOnlyList<GameComponent> Components => _components;
 
+    public Transform2D Transform { get; }
+
+    /// <summary>World-space position. Use <see cref="Transform2D.LocalPosition"/> for parent-relative placement.</summary>
     public Vector2D<double> Position
     {
-        get => _position;
-        set => _position = value;
+        get => Transform.WorldPosition;
+        set => Transform.SetWorldPosition(value);
     }
 
     public void Init()
@@ -189,6 +196,48 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
         }
     }
 
+    /// <summary>
+    /// Changes this object's parent. When <paramref name="keepWorldTransform"/> is true,
+    /// its visible world position, counter-clockwise rotation, and scale are preserved.
+    /// Otherwise its local transform is preserved.
+    /// </summary>
+    public void SetParent(GameObject? parent, bool keepWorldTransform = false)
+    {
+        if (ReferenceEquals(parent, _parent)) return;
+        if (_scene is not null && _parent is null)
+            throw new InvalidOperationException("A scene root cannot be parented.");
+        if (ReferenceEquals(parent, this))
+            throw new InvalidOperationException("A game object cannot be its own parent.");
+
+        for (var ancestor = parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (ReferenceEquals(ancestor, this))
+                throw new InvalidOperationException("A game object cannot become a child of one of its descendants.");
+        }
+
+        var previousParent = _parent;
+        var previousLocal = Transform.CaptureLocal();
+        var previousWorld = Transform.CaptureWorld();
+
+        if (previousParent is not null && !previousParent.RemoveChild(this))
+            throw new InvalidOperationException("The current parent does not own this game object.");
+
+        if (keepWorldTransform) Transform.SetLocalFromWorld(previousWorld, parent?.Transform);
+
+        if (parent is null) return;
+
+        try
+        {
+            parent.AddChild(this);
+        }
+        catch
+        {
+            Transform.RestoreLocal(previousLocal);
+            if (previousParent is not null) previousParent.AddChild(this);
+            throw;
+        }
+    }
+
     public bool RemoveChild(GameObject child)
     {
         ArgumentNullException.ThrowIfNull(child);
@@ -274,15 +323,15 @@ public abstract class GameObject : IInitializable, IUpdateable, IFixedUpdateable
     protected virtual void OnRender(IRenderContext2D renderer)
     {
     }
-    
+
     public void Move(Vector2D<double> delta)
     {
-        _position += delta;
+        Position += delta;
     }
 
     public void Move(double x, double y)
     {
-        _position += new Vector2D<double>(x, y);
+        Position += new Vector2D<double>(x, y);
     }
 
     private void EnsureInitialized()

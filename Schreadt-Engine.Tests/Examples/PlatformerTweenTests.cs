@@ -93,6 +93,22 @@ public sealed class PlatformerTweenTests
     }
 
     [Fact]
+    public void GoalPortal_OrbitingLightUsesHierarchicalTransform()
+    {
+        var portal = new GoalPortal { Position = new Vector2D<double>(2.0, 3.0) };
+        portal.Init();
+        var pivot = Assert.Single(portal.Children);
+        var light = Assert.Single(pivot.Children);
+
+        Assert.Equal(new Vector2D<double>(2.08, 3.0), light.Position);
+
+        portal.Update(0.75);
+
+        Assert.Equal(2.0, light.Position.X, 10);
+        Assert.Equal(3.08, light.Position.Y, 10);
+    }
+
+    [Fact]
     public void Player_CanJumpWhileStandingOnPushableCrate()
     {
         var input = new TestInputState { JumpDown = true };

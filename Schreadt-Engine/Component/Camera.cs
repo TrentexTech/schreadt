@@ -6,15 +6,14 @@ namespace Schreadt_Engine.Component;
 public class Camera : GameObject
 {
     private double _orthographicSize = 1.0;
-    private double _rotationRadians;
     private Vector2D<double> _effectPositionOffset;
     private double _effectRotationOffset;
 
     public CameraController? Controller => GetComponent<CameraController>();
 
-    public Vector2D<double> RenderPosition => Position + _effectPositionOffset;
+    public Vector2D<double> RenderPosition => Transform.WorldPosition + _effectPositionOffset;
 
-    public double RenderRotationRadians => RotationRadians + _effectRotationOffset;
+    public double RenderRotationRadians => Transform.WorldRotation + _effectRotationOffset;
 
     public double ViewportAspectRatio { get; private set; } = 1.0;
 
@@ -39,14 +38,8 @@ public class Camera : GameObject
     /// </summary>
     public double RotationRadians
     {
-        get => _rotationRadians;
-        set
-        {
-            if (!double.IsFinite(value))
-                throw new ArgumentOutOfRangeException(nameof(value), "Camera rotation must be finite.");
-
-            _rotationRadians = value;
-        }
+        get => Transform.WorldRotation;
+        set => Transform.SetWorldRotation(value);
     }
 
     public T SetController<T>(T controller) where T : CameraController

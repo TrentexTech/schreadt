@@ -86,7 +86,7 @@ public sealed class TriggerZone2D : Actor
 
     protected override void OnRender(IRenderContext2D renderer)
     {
-        if (Visible) renderer.DrawCircle(Position + Collider.Offset, Radius, Color);
+        if (Visible) renderer.DrawCircle(Collider.Center, Radius, Color);
     }
 
     private void HandleCollisionEntered(CollisionContact2D contact)
