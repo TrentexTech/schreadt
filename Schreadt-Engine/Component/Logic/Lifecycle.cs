@@ -19,8 +19,3 @@ public interface IShutdownable
 {
     void Shutdown();
 }
-
-[Obsolete("Implement only the lifecycle capability interfaces the type needs.")]
-public interface ILogic : IInitializable, IUpdateable
-{
-}

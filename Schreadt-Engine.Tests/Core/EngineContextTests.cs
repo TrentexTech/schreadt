@@ -1,5 +1,3 @@
-#pragma warning disable CS0618 // State is intentionally exercised as a compatibility facade.
-
 using Schreadt_Engine.Asset;
 using Schreadt_Engine.Component;
 using Schreadt_Engine.Component.Logic;
@@ -9,11 +7,11 @@ using Silk.NET.Maths;
 
 namespace Schreadt_Engine.Tests.Core;
 
-[Collection("Engine state")]
+[Collection("Engine lifecycle")]
 public sealed class EngineContextTests
 {
     [Fact]
-    public void FailedInitialization_ClearsAllGlobalStateAndAllowsSecondInitialization()
+    public void FailedInitialization_ReleasesResourcesAndAllowsSecondInitialization()
     {
         EngineMain.Shutdown();
         var failingLogic = new FailingGameLogic();
@@ -25,19 +23,10 @@ public sealed class EngineContextTests
 
             Assert.Equal("Injected initialization failure.", exception.Message);
             Assert.NotNull(failingLogic.CapturedContext);
-            Assert.Null(State.CurrentContext);
-            Assert.Empty(State.LaunchArgs);
-            Assert.Throws<InvalidOperationException>(() => State.CurrentReality);
-            Assert.Throws<InvalidOperationException>(() => State.Input);
-            Assert.Throws<InvalidOperationException>(() => State.Gui);
-            Assert.Throws<InvalidOperationException>(() => State.Assets);
-            Assert.Throws<InvalidOperationException>(() => State.Window);
-            Assert.Throws<InvalidOperationException>(() => State.Runtime);
-
             var successfulLogic = new SuccessfulGameLogic();
             EngineMain.Init(successfulLogic, ["second-run"]);
 
-            Assert.Same(successfulLogic.CapturedContext, State.CurrentContext);
+            Assert.NotNull(successfulLogic.CapturedContext);
             Assert.Equal(["second-run"], successfulLogic.CapturedContext!.LaunchArgs);
             Assert.Equal("ready", successfulLogic.CapturedContext.Scenes.CurrentSceneName);
         }
@@ -45,13 +34,10 @@ public sealed class EngineContextTests
         {
             EngineMain.Shutdown();
         }
-
-        Assert.Null(State.CurrentContext);
-        Assert.Empty(State.LaunchArgs);
     }
 
     [Fact]
-    public void IndependentContexts_DoNotShareEngineServicesOrUseGlobalState()
+    public void IndependentContexts_DoNotShareEngineServices()
     {
         EngineMain.Shutdown();
         using var first = ContextHarness.Create("first");
@@ -74,7 +60,6 @@ public sealed class EngineContextTests
         Assert.Same(second.Context, second.Reality.Scene.Context);
         Assert.Equal("first", first.Context.Scenes.CurrentSceneName);
         Assert.Equal("second", second.Context.Scenes.CurrentSceneName);
-        Assert.Null(State.CurrentContext);
     }
 
     private sealed class FailingGameLogic : GameLogic
@@ -226,5 +211,5 @@ public sealed class EngineContextTests
     }
 }
 
-[CollectionDefinition("Engine state", DisableParallelization = true)]
-public sealed class EngineStateCollection;
+[CollectionDefinition("Engine lifecycle", DisableParallelization = true)]
+public sealed class EngineLifecycleCollection;

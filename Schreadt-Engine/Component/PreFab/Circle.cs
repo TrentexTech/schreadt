@@ -10,7 +10,7 @@ public class Circle : Actor
 
     public Vector4D<float> Color { get; init; } = new(0.15f, 0.65f, 1.0f, 1.0f);
 
-    public Circle(ActorLogic? actorLogic = null) : base(actorLogic)
+    public Circle()
     {
     }
 

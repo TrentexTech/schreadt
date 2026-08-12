@@ -96,8 +96,8 @@ public sealed class PlatformerTweenTests
     public void Player_CanJumpWhileStandingOnPushableCrate()
     {
         var input = new TestInputState { JumpDown = true };
-        var logic = new PlatformerPlayerLogic(input, Vector2D<double>.Zero);
-        var player = new PlayerAvatar(logic)
+        var behavior = new PlatformerPlayerBehavior(input, Vector2D<double>.Zero);
+        var player = new PlayerAvatar(behavior)
         {
             Position = new Vector2D<double>(0.0, 0.48)
         };

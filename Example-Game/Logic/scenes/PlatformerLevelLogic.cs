@@ -15,7 +15,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
     private readonly string _title;
     private readonly int _number;
     private readonly string? _nextScene;
-    private PlatformerPlayerLogic _playerLogic = null!;
+    private PlatformerPlayerBehavior _playerBehavior = null!;
     private PlayerAvatar _player = null!;
     private GuiLabel _stats = null!;
     private int _stars;
@@ -40,9 +40,9 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         Scene.Collisions.Gravity = Gravity;
         Scene.AddChild(new LevelBackdrop(_number));
 
-        _playerLogic = new PlatformerPlayerLogic(_input, SpawnPoint);
-        _playerLogic.StatsChanged += UpdateStats;
-        _player = new PlayerAvatar(_playerLogic)
+        _playerBehavior = new PlatformerPlayerBehavior(_input, SpawnPoint);
+        _playerBehavior.StatsChanged += UpdateStats;
+        _player = new PlayerAvatar(_playerBehavior)
         {
             Position = SpawnPoint,
             RenderLayer = 30
@@ -168,7 +168,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         double endAngle,
         double sweepDuration)
     {
-        var scanner = new LaserScanner(startAngle, endAngle, sweepDuration, _playerLogic.HitHazard)
+        var scanner = new LaserScanner(startAngle, endAngle, sweepDuration, _playerBehavior.HitHazard)
         {
             Position = new Vector2D<double>(x, y),
             RenderLayer = 24
@@ -219,7 +219,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         };
         void HandleSpikeContact(CollisionContact2D contact)
         {
-            if (ReferenceEquals(contact.Other.Owner, _player)) _playerLogic.HitHazard();
+            if (ReferenceEquals(contact.Other.Owner, _player)) _playerBehavior.HitHazard();
         }
 
         trigger.Collider.CollisionEntered += HandleSpikeContact;
@@ -258,7 +258,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
             if (_finished || !ReferenceEquals(contact.Other.Owner, _player)) return;
             _finished = true;
             if (_nextScene is not null) Context.Scenes.LoadScene(_nextScene);
-            else PlatformerScreens.ShowVictory(Scene, _stars, _playerLogic.Deaths);
+            else PlatformerScreens.ShowVictory(Scene, _stars, _playerBehavior.Deaths);
         };
         Scene.AddChild(portal);
     }
@@ -286,7 +286,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         };
         void HandleEnemyContact(CollisionContact2D contact)
         {
-            if (ReferenceEquals(contact.Other.Owner, _player)) _playerLogic.HitHazard();
+            if (ReferenceEquals(contact.Other.Owner, _player)) _playerBehavior.HitHazard();
         }
 
         enemy.Collider.CollisionEntered += HandleEnemyContact;
@@ -334,7 +334,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
 
     private void UpdateStats()
     {
-        if (_stats is not null) _stats.Text = $"STARS {_stars}/3   FALLS {_playerLogic.Deaths}";
+        if (_stats is not null) _stats.Text = $"STARS {_stars}/3   FALLS {_playerBehavior.Deaths}";
     }
 
     private void ConfigureCamera()

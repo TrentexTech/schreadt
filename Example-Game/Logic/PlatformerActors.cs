@@ -8,7 +8,7 @@ using Silk.NET.Maths;
 
 namespace Example_Game.Logic;
 
-internal sealed class PlatformerPlayerLogic : ActorLogic
+internal sealed class PlatformerPlayerBehavior : ActorBehavior
 {
     private const double RunSpeed = 3.15;
     private const double GroundAcceleration = 22.0;
@@ -28,7 +28,7 @@ internal sealed class PlatformerPlayerLogic : ActorLogic
     internal int Deaths { get; private set; }
     internal event Action? StatsChanged;
 
-    internal PlatformerPlayerLogic(IInputState input, Vector2D<double> spawn)
+    internal PlatformerPlayerBehavior(IInputState input, Vector2D<double> spawn)
     {
         _input = input;
         _spawn = spawn;
@@ -119,7 +119,7 @@ internal sealed class PlayerAvatar : Actor
 {
     internal const double PlayerRadius = 0.23;
 
-    internal PlayerAvatar(PlatformerPlayerLogic logic) : base(logic)
+    internal PlayerAvatar(PlatformerPlayerBehavior behavior)
     {
         AddComponent(new RigidBody2D
         {
@@ -136,6 +136,7 @@ internal sealed class PlayerAvatar : Actor
             CollisionLayer = ExampleCollisionLayers.Player,
             CollisionMask = ExampleCollisionLayers.PlayerMask
         });
+        AddComponent(behavior);
     }
 
     protected override void OnRender(IRenderContext2D renderer)

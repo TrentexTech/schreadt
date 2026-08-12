@@ -21,7 +21,6 @@ internal static class EngineMain
 
         AssetCatalog? candidateAssets = null;
         Application? candidateApp = null;
-        var contextPublished = false;
         try
         {
             Config.Load();
@@ -31,8 +30,6 @@ internal static class EngineMain
             candidateAssets = AssetCatalog.LoadFromDirectory(FileHandler.ContentRoot, Config.Data.AssetLibraries);
             EngineLog.Information($"Asset catalog ready with {candidateAssets.Count} asset(s).", "Assets");
             candidateApp = new Application(gameLogic, candidateAssets, launchArgs ?? []);
-            State.Publish(candidateApp.Context, candidateApp.Reality);
-            contextPublished = true;
             candidateApp.Init();
             assets = candidateAssets;
             app = candidateApp;
@@ -46,7 +43,7 @@ internal static class EngineMain
             EngineLog.Error("Engine initialization failed; rolling back engine state and resources.", exception, "Engine");
             app = null;
             assets = null;
-            RollBackInitialization(candidateApp, candidateAssets, contextPublished);
+            RollBackInitialization(candidateApp, candidateAssets);
             throw;
         }
     }
@@ -88,21 +85,13 @@ internal static class EngineMain
         }
         finally
         {
-            try
-            {
-                currentAssets?.Dispose();
-            }
-            finally
-            {
-                if (currentApp is not null) State.Reset(currentApp.Context);
-            }
+            currentAssets?.Dispose();
         }
     }
 
     private static void RollBackInitialization(
         Application? candidateApp,
-        AssetCatalog? candidateAssets,
-        bool contextPublished)
+        AssetCatalog? candidateAssets)
     {
         try
         {
@@ -129,10 +118,6 @@ internal static class EngineMain
         catch (Exception exception)
         {
             EngineLog.Error("Application rollback failed while disposing assets.", exception, "Engine");
-        }
-        finally
-        {
-            if (contextPublished && candidateApp is not null) State.Reset(candidateApp.Context);
         }
     }
 }

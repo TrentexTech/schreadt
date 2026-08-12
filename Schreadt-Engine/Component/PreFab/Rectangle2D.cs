@@ -33,7 +33,7 @@ public class Rectangle2D : Actor
 
     public Vector4D<float> Color { get; set; } = new(0.95f, 0.45f, 0.2f, 1.0f);
 
-    public Rectangle2D(ActorLogic? actorLogic = null) : base(actorLogic)
+    public Rectangle2D()
     {
     }
 

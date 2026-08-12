@@ -14,7 +14,7 @@ public class Sprite : Actor, ISpriteRegionTarget
     public TextureRegion Region { get; set; } = TextureRegion.Full;
     public TextureSampling Sampling { get; set; } = TextureSampling.Linear;
 
-    public Sprite(string imageAssetId, ActorLogic? actorLogic = null) : base(actorLogic)
+    public Sprite(string imageAssetId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(imageAssetId);
         ImageAssetId = imageAssetId;

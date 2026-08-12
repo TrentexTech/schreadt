@@ -12,6 +12,7 @@ public class Polygon : Actor
     private double _rotationRadians;
 
     public IReadOnlyList<Vector2D<double>> Vertices => _readOnlyVertices;
+
     public Vector2D<double> Scale
     {
         get => _scale;
@@ -36,7 +37,7 @@ public class Polygon : Actor
 
     public Vector4D<float> Color { get; set; } = new(0.7f, 0.35f, 1.0f, 1.0f);
 
-    public Polygon(IEnumerable<Vector2D<double>> vertices, ActorLogic? actorLogic = null) : base(actorLogic)
+    public Polygon(IEnumerable<Vector2D<double>> vertices)
     {
         _vertices = ConvexPolygon2D.CopyAndValidate(vertices, nameof(vertices));
         _readOnlyVertices = Array.AsReadOnly(_vertices);

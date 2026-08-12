@@ -12,15 +12,14 @@ public sealed class Triangle : Polygon
         new(0.5, -0.5)
     ];
 
-    public Triangle(ActorLogic? actorLogic = null) : base(DefaultVertices, actorLogic)
+    public Triangle() : base(DefaultVertices)
     {
     }
 
     public Triangle(
         Vector2D<double> first,
         Vector2D<double> second,
-        Vector2D<double> third,
-        ActorLogic? actorLogic = null) : base([first, second, third], actorLogic)
+        Vector2D<double> third) : base([first, second, third])
     {
     }
 }

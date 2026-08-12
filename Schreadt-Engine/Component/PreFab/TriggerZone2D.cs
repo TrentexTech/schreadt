@@ -70,7 +70,7 @@ public sealed class TriggerZone2D : Actor
     public event Action<TriggerOverlap2D>? Stayed;
     public event Action<TriggerOverlap2D>? Exited;
 
-    public TriggerZone2D(double radius, ActorLogic? actorLogic = null) : base(actorLogic)
+    public TriggerZone2D(double radius)
     {
         Collider = AddComponent(new CircleCollider2D(radius) { IsTrigger = true });
         Collider.CollisionEntered += HandleCollisionEntered;
