@@ -20,6 +20,9 @@ public sealed class CollisionWorld2D
         RegisterNarrowPhase(new CircleCircleNarrowPhase2D());
         RegisterNarrowPhase(new BoxBoxNarrowPhase2D());
         RegisterNarrowPhase(new CircleBoxNarrowPhase2D());
+        RegisterNarrowPhase(new OrientedBoxOrientedBoxNarrowPhase2D());
+        RegisterNarrowPhase(new AxisAlignedBoxOrientedBoxNarrowPhase2D());
+        RegisterNarrowPhase(new CircleOrientedBoxNarrowPhase2D());
     }
 
     public IReadOnlyList<Collider2D> Colliders => _colliders;
@@ -404,6 +407,8 @@ public sealed class CollisionWorld2D
             CircleCollider2D circle => LengthSquared(point - circle.Center) <= circle.Radius * circle.Radius,
             AxisAlignedBoxCollider2D box => point.X >= box.Minimum.X && point.X <= box.Maximum.X &&
                                                   point.Y >= box.Minimum.Y && point.Y <= box.Maximum.Y,
+            OrientedBoxCollider2D box =>
+                BoxCollisionGeometry2D.ContainsPoint(BoxGeometry2D.From(box), point),
             _ => false
         };
     }
@@ -421,6 +426,9 @@ public sealed class CollisionWorld2D
                     Math.Clamp(center.X, box.Minimum.X, box.Maximum.X),
                     Math.Clamp(center.Y, box.Minimum.Y, box.Maximum.Y));
                 return LengthSquared(center - closest) <= radius * radius;
+
+            case OrientedBoxCollider2D box:
+                return BoxCollisionGeometry2D.OverlapsCircle(BoxGeometry2D.From(box), center, radius);
 
             default:
                 return false;
@@ -444,6 +452,14 @@ public sealed class CollisionWorld2D
                 return minimum.X <= box.Maximum.X && maximum.X >= box.Minimum.X &&
                        minimum.Y <= box.Maximum.Y && maximum.Y >= box.Minimum.Y;
 
+            case OrientedBoxCollider2D box:
+                var queryCenter = (minimum + maximum) * 0.5;
+                var queryHalfSize = (maximum - minimum) * 0.5;
+                return BoxCollisionGeometry2D.TryCollide(
+                    BoxGeometry2D.AxisAligned(queryCenter, queryHalfSize),
+                    BoxGeometry2D.From(box),
+                    out _);
+
             default:
                 return false;
         }
@@ -462,6 +478,8 @@ public sealed class CollisionWorld2D
             CircleCollider2D circle => TryRaycastCircle(
                 circle, origin, direction, maximumDistance, out distance, out normal),
             AxisAlignedBoxCollider2D box => TryRaycastBox(
+                box, origin, direction, maximumDistance, out distance, out normal),
+            OrientedBoxCollider2D box => TryRaycastOrientedBox(
                 box, origin, direction, maximumDistance, out distance, out normal),
             _ => NoRaycastHit(out distance, out normal)
         };
@@ -528,6 +546,51 @@ public sealed class CollisionWorld2D
         }
 
         distance = near;
+        return true;
+    }
+
+    private static bool TryRaycastOrientedBox(
+        OrientedBoxCollider2D box,
+        Vector2D<double> origin,
+        Vector2D<double> direction,
+        double maximumDistance,
+        out double distance,
+        out Vector2D<double> normal)
+    {
+        var geometry = BoxGeometry2D.From(box);
+        if (BoxCollisionGeometry2D.ContainsPoint(geometry, origin))
+        {
+            distance = 0.0;
+            normal = -direction;
+            return true;
+        }
+
+        var originOffset = origin - geometry.Center;
+        var localOrigin = new Vector2D<double>(
+            Dot(originOffset, geometry.AxisX),
+            Dot(originOffset, geometry.AxisY));
+        var localDirection = new Vector2D<double>(
+            Dot(direction, geometry.AxisX),
+            Dot(direction, geometry.AxisY));
+        var near = 0.0;
+        var far = maximumDistance;
+        var localNormal = Vector2D<double>.Zero;
+
+        if (!ClipRayAxis(
+                localOrigin.X, localDirection.X, -geometry.HalfSize.X, geometry.HalfSize.X,
+                new Vector2D<double>(-1.0, 0.0), new Vector2D<double>(1.0, 0.0),
+                ref near, ref far, ref localNormal) ||
+            !ClipRayAxis(
+                localOrigin.Y, localDirection.Y, -geometry.HalfSize.Y, geometry.HalfSize.Y,
+                new Vector2D<double>(0.0, -1.0), new Vector2D<double>(0.0, 1.0),
+                ref near, ref far, ref localNormal) ||
+            near > maximumDistance)
+        {
+            return NoRaycastHit(out distance, out normal);
+        }
+
+        distance = near;
+        normal = (geometry.AxisX * localNormal.X) + (geometry.AxisY * localNormal.Y);
         return true;
     }
 

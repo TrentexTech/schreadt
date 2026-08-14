@@ -13,7 +13,8 @@ internal sealed class ExampleLevelSelector : IDisposable
         new(ExampleGameLogic.LevelTwo, "2  CRYSTAL HEIGHTS"),
         new(ExampleGameLogic.LevelThree, "3  LUNAR GARDENS"),
         new(ExampleGameLogic.LevelFour, "4  CLOCKWORK FORTRESS"),
-        new(ExampleGameLogic.LevelFive, "5  TEMPEST SPIRE")
+        new(ExampleGameLogic.LevelFive, "5  TEMPEST SPIRE"),
+        new(ExampleGameLogic.LevelSix, "6  ORIENTED COLLIDER LAB")
     ];
 
     private readonly SceneManager _scenes;

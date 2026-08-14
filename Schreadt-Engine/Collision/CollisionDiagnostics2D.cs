@@ -75,6 +75,10 @@ public sealed class CollisionDebugDraw2D
                 case AxisAlignedBoxCollider2D box:
                     renderer.DrawRectangle(box.Center, box.Size, color);
                     break;
+
+                case OrientedBoxCollider2D box:
+                    renderer.DrawRectangle(box.Center, box.Size, color, box.WorldRotation);
+                    break;
             }
         }
     }

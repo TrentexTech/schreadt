@@ -276,6 +276,96 @@ public sealed class PlatformerTweenTests
         }
     }
 
+    [Fact]
+    public void ProvisionalRotatingBeam_UpdatesCollisionAndRenderingInFixedStep()
+    {
+        var scene = new Scene("oriented-beam-test", new EmptySceneLogic());
+        var beam = new ProvisionalRotatingBeam(
+            new Vector2D<double>(2.0, 0.2),
+            minimumRotation: -Math.PI / 2.0,
+            maximumRotation: Math.PI / 2.0,
+            cycleDuration: 4.0);
+        var probe = new Circle { Position = new Vector2D<double>(0.0, 0.8), Radius = 0.15 };
+        var probeCollider = probe.AddComponent(new CircleCollider2D(probe.Radius));
+        var entered = false;
+        beam.Collider.CollisionEntered += contact =>
+        {
+            if (ReferenceEquals(contact.Other, probeCollider)) entered = true;
+        };
+        scene.AddChild(beam);
+        scene.AddChild(probe);
+        scene.Init();
+
+        scene.Collisions.Step(0.0);
+        Assert.False(entered);
+
+        beam.FixedUpdate(1.0);
+        scene.Collisions.Step(0.0);
+
+        Assert.True(entered);
+        Assert.Equal(Math.PI / 2.0, beam.RotationRadians, 10);
+        Assert.Equal(beam.RotationRadians, beam.Collider.WorldRotation, 10);
+        var renderer = new RotationRecordingRenderContext();
+        beam.Render(renderer);
+        var draw = Assert.Single(renderer.Rectangles);
+        Assert.Equal(beam.RotationRadians, draw.Rotation, 10);
+        Assert.Equal(beam.Size, draw.Size);
+    }
+
+    [Fact]
+    public void ProvisionalOrientedPlatform_UsesHierarchyForItsRotatedSurfaceStripe()
+    {
+        var platform = new ProvisionalOrientedPlatform(
+            new Vector2D<double>(2.0, 0.3),
+            Math.PI / 4.0)
+        {
+            Position = new Vector2D<double>(2.0, 3.0)
+        };
+        platform.Init();
+        var stripe = Assert.IsType<Rectangle2D>(Assert.Single(platform.Children));
+
+        Assert.Equal(platform.RotationRadians, platform.Collider.WorldRotation, 10);
+        Assert.Equal(platform.RotationRadians, stripe.RotationRadians, 10);
+        var expectedStripePosition = platform.Position + Transform2D.Rotate(
+            stripe.Transform.LocalPosition,
+            platform.RotationRadians);
+        Assert.Equal(expectedStripePosition.X, stripe.Position.X, 10);
+        Assert.Equal(expectedStripePosition.Y, stripe.Position.Y, 10);
+    }
+
+    [Fact]
+    public void ProvisionalOrientedCrate_UsesDynamicBodyAndMatchingCollider()
+    {
+        var crate = new ProvisionalOrientedCrate(0.35);
+
+        Assert.Equal(CollisionBodyType2D.Dynamic, crate.Body.BodyType);
+        Assert.Equal(crate.Size, crate.Collider.Size);
+        Assert.Equal(crate.RotationRadians, crate.Collider.WorldRotation, 10);
+        Assert.True(crate.Collider.CollisionMask.Contains(ExampleCollisionLayers.Player));
+        Assert.True(crate.Collider.CollisionMask.Contains(ExampleCollisionLayers.World));
+    }
+
+    [Fact]
+    public void Player_CanJumpFromProvisionalOrientedCrate()
+    {
+        var input = new TestInputState { JumpDown = true };
+        var behavior = new PlatformerPlayerBehavior(input, Vector2D<double>.Zero);
+        var player = new PlayerAvatar(behavior);
+        var crate = new ProvisionalOrientedCrate(0.35);
+        player.Position = crate.Position + crate.Collider.AxisY *
+            (crate.Collider.HalfSize.Y + PlayerAvatar.PlayerRadius - 0.01);
+        var scene = new Scene("oriented-crate-jump-test", new EmptySceneLogic());
+        scene.Collisions.Gravity = Vector2D<double>.Zero;
+        scene.AddChild(player);
+        scene.AddChild(crate);
+        scene.Init();
+
+        scene.Collisions.Step(1.0 / 120.0);
+        player.Update(1.0 / 60.0);
+
+        Assert.Equal(5.35, player.GetComponent<RigidBody2D>()!.Velocity.Y, 10);
+    }
+
     private sealed class TestActor : Actor;
 
     private sealed class EmptySceneLogic : SceneLogic
@@ -307,6 +397,60 @@ public sealed class PlatformerTweenTests
             Assert.True(size.X > 0.0);
             Assert.True(size.Y > 0.0);
         }
+
+        public void DrawPolygon(
+            Vector2D<double> center,
+            IReadOnlyList<Vector2D<double>> localVertices,
+            Vector2D<double> scale,
+            double rotationRadians,
+            Vector4D<float> color)
+        {
+        }
+
+        public void DrawSprite(
+            string imageAssetId,
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> tint,
+            double rotationRadians = 0.0,
+            TextureRegion? region = null,
+            TextureSampling sampling = TextureSampling.Linear)
+        {
+        }
+
+        public void DrawText(
+            string text,
+            Vector2D<float> position,
+            float scale,
+            Vector4D<float> color,
+            Vector4D<float> backgroundColor,
+            float padding = 0.0f)
+        {
+        }
+
+        public void DrawScreenRectangle(
+            Vector2D<float> position,
+            Vector2D<float> size,
+            Vector4D<float> color)
+        {
+        }
+    }
+
+    private sealed class RotationRecordingRenderContext : IRenderContext2D
+    {
+        internal List<(Vector2D<double> Size, double Rotation)> Rectangles { get; } = [];
+
+        public Vector2D<int> ViewportSize => new(1280, 720);
+
+        public void DrawCircle(Vector2D<double> center, double radius, Vector4D<float> color)
+        {
+        }
+
+        public void DrawRectangle(
+            Vector2D<double> center,
+            Vector2D<double> size,
+            Vector4D<float> color,
+            double rotationRadians = 0.0) => Rectangles.Add((size, rotationRadians));
 
         public void DrawPolygon(
             Vector2D<double> center,

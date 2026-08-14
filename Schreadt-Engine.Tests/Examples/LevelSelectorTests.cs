@@ -18,6 +18,7 @@ public sealed class LevelSelectorTests
         scenes.RegisterScene(ExampleGameLogic.LevelThree, () => new EmptySceneLogic());
         scenes.RegisterScene(ExampleGameLogic.LevelFour, () => new EmptySceneLogic());
         scenes.RegisterScene(ExampleGameLogic.LevelFive, () => new EmptySceneLogic());
+        scenes.RegisterScene(ExampleGameLogic.LevelSix, () => new EmptySceneLogic());
         scenes.LoadScene(ExampleGameLogic.LevelOne);
         var selector = new ExampleLevelSelector(scenes, gui);
 
@@ -27,7 +28,8 @@ public sealed class LevelSelectorTests
             selector.Update();
 
             Assert.Same(selector.Root, Assert.Single(gui.Elements));
-            Assert.Equal(5, selector.Buttons.Count);
+            Assert.Equal(ExampleGameLogic.LevelCount, selector.Buttons.Count);
+            Assert.Contains(ExampleGameLogic.LevelSix, selector.Buttons.Keys);
             Assert.Equal("CURRENT: SUNNY MEADOWS", selector.CurrentLevel.Text);
             Assert.False(selector.Buttons[ExampleGameLogic.LevelOne].Enabled);
             Assert.All(

@@ -14,6 +14,8 @@ public sealed class ExampleGameLogic : GameLogic
     internal const string LevelThree = "lunar-gardens";
     internal const string LevelFour = "clockwork-fortress";
     internal const string LevelFive = "tempest-spire";
+    internal const string LevelSix = "oriented-collider-lab";
+    internal const int LevelCount = 6;
     internal static SceneTransition LevelTransition { get; } = new FadeToColorSceneTransition(
         new Vector4D<float>(0.01f, 0.02f, 0.06f, 1.0f),
         0.55,
@@ -44,6 +46,7 @@ public sealed class ExampleGameLogic : GameLogic
         Reality.Scenes.RegisterScene(LevelThree, () => new Scene2(Input));
         Reality.Scenes.RegisterScene(LevelFour, () => new Scene3(Input));
         Reality.Scenes.RegisterScene(LevelFive, () => new Scene4(Input));
+        Reality.Scenes.RegisterScene(LevelSix, () => new Scene5(Input));
         Reality.Scenes.LoadScene(LevelOne);
         Reality.MainCamera.OrthographicSize = 2.4;
 

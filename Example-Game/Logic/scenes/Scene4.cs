@@ -9,7 +9,7 @@ internal sealed class Scene4 : PlatformerLevelLogic
     private TempestStorm2D _storm = null!;
 
     internal Scene4(IInputState input)
-        : base(input, 5, "TEMPEST SPIRE", null)
+        : base(input, 5, "TEMPEST SPIRE", ExampleGameLogic.LevelSix)
     {
     }
 

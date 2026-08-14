@@ -102,7 +102,7 @@ internal sealed class PlatformerPlayerBehavior : ActorBehavior
     private void TrackGroundContact(CollisionContact2D contact)
     {
         var isGround = contact.Other.CollisionLayer == ExampleCollisionLayers.World ||
-                       contact.Other.Owner is PushableCrate;
+                       contact.Other.CollisionLayer == ExampleCollisionLayers.Mechanic && !contact.Other.IsTrigger;
         if (!isGround) return;
         if (contact.Normal.Y < -0.55) _groundContacts.Add(contact.Other);
         else _groundContacts.Remove(contact.Other);

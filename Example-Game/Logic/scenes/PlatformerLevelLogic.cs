@@ -318,7 +318,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         panel.Padding = 8;
         panel.Spacing = 4;
         panel.BackgroundColor = new Vector4D<float>(0.035f, 0.055f, 0.11f, 0.88f);
-        var heading = panel.AddLabel($"LEVEL {_number}/5");
+        var heading = panel.AddLabel($"LEVEL {_number}/{ExampleGameLogic.LevelCount}");
         heading.Color = new Vector4D<float>(0.38f, 0.9f, 1f, 1f);
         panel.AddLabel(_title).Scale = 1.3f;
         if (HudNote is not null)
