@@ -6,7 +6,19 @@ namespace Schreadt_Engine.Collision;
 public readonly record struct CollisionContact2D(
     Collider2D Other,
     Vector2D<double> Normal,
-    double Penetration);
+    double Penetration,
+    Vector2D<double> Point = default)
+{
+    public void Deconstruct(
+        out Collider2D other,
+        out Vector2D<double> normal,
+        out double penetration)
+    {
+        other = Other;
+        normal = Normal;
+        penetration = Penetration;
+    }
+}
 
 public abstract class Collider2D : GameComponent, ICollisionShape2D
 {

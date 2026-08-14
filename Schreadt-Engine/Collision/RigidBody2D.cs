@@ -17,15 +17,22 @@ public sealed class RigidBody2D : GameComponent
     private CollisionBodyType2D _bodyType;
     private Vector2D<double> _velocity;
     private Vector2D<double> _accumulatedForce;
+    private double _angularVelocity;
+    private double _accumulatedTorque;
     private bool _useGravity = true;
     private bool _allowSleep = true;
+    private bool _fixedRotation;
     private double _gravityScale = 1.0;
     private double _mass = 1.0;
+    private double _momentOfInertia = 1.0;
     private double _restitution;
     private double _friction = 0.5;
     private double _linearDamping;
+    private double _angularDamping;
     private double _maximumSpeed = double.PositiveInfinity;
+    private double _maximumAngularSpeed = double.PositiveInfinity;
     private double _sleepVelocityThreshold = 0.02;
+    private double _sleepAngularVelocityThreshold = 0.02;
     private double _timeToSleep = 0.5;
     private double _sleepTimer;
 
@@ -41,7 +48,11 @@ public sealed class RigidBody2D : GameComponent
 
             _bodyType = value;
             WakeUp();
-            if (value != CollisionBodyType2D.Dynamic) _accumulatedForce = Vector2D<double>.Zero;
+            if (value != CollisionBodyType2D.Dynamic)
+            {
+                _accumulatedForce = Vector2D<double>.Zero;
+                _accumulatedTorque = 0.0;
+            }
         }
     }
 
@@ -69,6 +80,21 @@ public sealed class RigidBody2D : GameComponent
     }
 
     public Vector2D<double> AccumulatedForce => _accumulatedForce;
+
+    /// <summary>Counter-clockwise angular velocity in radians per second.</summary>
+    public double AngularVelocity
+    {
+        get => _angularVelocity;
+        set
+        {
+            EnsureFinite(value, nameof(value), "Angular velocity must be finite.");
+            _angularVelocity = FixedRotation ? 0.0 : value;
+            ClampAngularVelocity();
+            WakeUp();
+        }
+    }
+
+    public double AccumulatedTorque => _accumulatedTorque;
 
     public bool IsSleeping { get; private set; }
 
@@ -104,6 +130,39 @@ public sealed class RigidBody2D : GameComponent
                 throw new ArgumentOutOfRangeException(nameof(value), "Mass must be finite and greater than zero.");
 
             _mass = value;
+            WakeUp();
+        }
+    }
+
+    /// <summary>
+    /// Explicit moment of inertia around the owner's origin. Compound bodies must choose this value deliberately.
+    /// </summary>
+    public double MomentOfInertia
+    {
+        get => _momentOfInertia;
+        set
+        {
+            if (!double.IsFinite(value) || value <= 0.0)
+                throw new ArgumentOutOfRangeException(nameof(value), "Moment of inertia must be finite and greater than zero.");
+
+            _momentOfInertia = value;
+            WakeUp();
+        }
+    }
+
+    public bool FixedRotation
+    {
+        get => _fixedRotation;
+        set
+        {
+            if (_fixedRotation == value) return;
+            _fixedRotation = value;
+            if (value)
+            {
+                _angularVelocity = 0.0;
+                _accumulatedTorque = 0.0;
+            }
+
             WakeUp();
         }
     }
@@ -145,6 +204,19 @@ public sealed class RigidBody2D : GameComponent
         }
     }
 
+    public double AngularDamping
+    {
+        get => _angularDamping;
+        set
+        {
+            if (!double.IsFinite(value) || value < 0.0)
+                throw new ArgumentOutOfRangeException(nameof(value), "Angular damping must be finite and non-negative.");
+
+            _angularDamping = value;
+            WakeUp();
+        }
+    }
+
     public double MaximumSpeed
     {
         get => _maximumSpeed;
@@ -158,6 +230,23 @@ public sealed class RigidBody2D : GameComponent
         }
     }
 
+    public double MaximumAngularSpeed
+    {
+        get => _maximumAngularSpeed;
+        set
+        {
+            if ((!double.IsFinite(value) && !double.IsPositiveInfinity(value)) || value <= 0.0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value),
+                    "Maximum angular speed must be positive or positive infinity.");
+            }
+
+            _maximumAngularSpeed = value;
+            ClampAngularVelocity();
+        }
+    }
+
     public double SleepVelocityThreshold
     {
         get => _sleepVelocityThreshold;
@@ -167,6 +256,23 @@ public sealed class RigidBody2D : GameComponent
                 throw new ArgumentOutOfRangeException(nameof(value), "Sleep velocity threshold must be finite and non-negative.");
 
             _sleepVelocityThreshold = value;
+            WakeUp();
+        }
+    }
+
+    public double SleepAngularVelocityThreshold
+    {
+        get => _sleepAngularVelocityThreshold;
+        set
+        {
+            if (!double.IsFinite(value) || value < 0.0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value),
+                    "Sleep angular velocity threshold must be finite and non-negative.");
+            }
+
+            _sleepAngularVelocityThreshold = value;
             WakeUp();
         }
     }
@@ -185,6 +291,9 @@ public sealed class RigidBody2D : GameComponent
     }
 
     internal double InverseMass => BodyType == CollisionBodyType2D.Dynamic ? 1.0 / Mass : 0.0;
+
+    internal double InverseMomentOfInertia =>
+        BodyType == CollisionBodyType2D.Dynamic && !FixedRotation ? 1.0 / MomentOfInertia : 0.0;
 
     public void AddForce(Vector2D<double> force)
     {
@@ -205,9 +314,43 @@ public sealed class RigidBody2D : GameComponent
         WakeUp();
     }
 
+    public void AddImpulseAtPoint(Vector2D<double> impulse, Vector2D<double> worldPoint)
+    {
+        EnsureFinite(impulse, nameof(impulse));
+        EnsureFinite(worldPoint, nameof(worldPoint));
+        if (BodyType != CollisionBodyType2D.Dynamic) return;
+
+        _velocity += impulse * InverseMass;
+        if (!FixedRotation)
+            _angularVelocity += Cross(worldPoint - Owner.Position, impulse) * InverseMomentOfInertia;
+        ClampVelocity();
+        ClampAngularVelocity();
+        WakeUp();
+    }
+
+    public void AddTorque(double torque)
+    {
+        EnsureFinite(torque, nameof(torque), "Torque must be finite.");
+        if (BodyType != CollisionBodyType2D.Dynamic || FixedRotation) return;
+
+        _accumulatedTorque += torque;
+        WakeUp();
+    }
+
+    public void AddAngularImpulse(double impulse)
+    {
+        EnsureFinite(impulse, nameof(impulse), "Angular impulse must be finite.");
+        if (BodyType != CollisionBodyType2D.Dynamic || FixedRotation) return;
+
+        _angularVelocity += impulse * InverseMomentOfInertia;
+        ClampAngularVelocity();
+        WakeUp();
+    }
+
     public void ClearForces()
     {
         _accumulatedForce = Vector2D<double>.Zero;
+        _accumulatedTorque = 0.0;
     }
 
     public void WakeUp()
@@ -223,7 +366,9 @@ public sealed class RigidBody2D : GameComponent
         IsSleeping = true;
         _sleepTimer = TimeToSleep;
         _velocity = Vector2D<double>.Zero;
+        _angularVelocity = 0.0;
         _accumulatedForce = Vector2D<double>.Zero;
+        _accumulatedTorque = 0.0;
     }
 
     internal void Integrate(Vector2D<double> gravity, double dt)
@@ -246,28 +391,46 @@ public sealed class RigidBody2D : GameComponent
             if (UseGravity) acceleration += gravity * GravityScale;
 
             _velocity += acceleration * dt;
+            if (!FixedRotation)
+                _angularVelocity += _accumulatedTorque * InverseMomentOfInertia * dt;
 
             if (LinearDamping > 0)
             {
                 _velocity *= Math.Exp(-LinearDamping * dt);
             }
 
+            if (AngularDamping > 0.0)
+                _angularVelocity *= Math.Exp(-AngularDamping * dt);
+
             ClampVelocity();
+            ClampAngularVelocity();
         }
 
         Owner.Move(_velocity * dt);
+        if (!FixedRotation && _angularVelocity != 0.0)
+            Owner.Transform.SetWorldRotation(Owner.Transform.WorldRotation + _angularVelocity * dt);
         ClearForces();
     }
 
-    internal void ApplyCollisionImpulse(Vector2D<double> impulse)
+    internal void ApplyCollisionImpulseAtPoint(Vector2D<double> impulse, Vector2D<double> worldPoint)
     {
         if (BodyType != CollisionBodyType2D.Dynamic) return;
 
-        var impulseLengthSquared = impulse.X * impulse.X + impulse.Y * impulse.Y;
-        if (IsSleeping && impulseLengthSquared > CollisionWakeThresholdSquared) WakeUp();
+        var angularImpulse = FixedRotation ? 0.0 : Cross(worldPoint - Owner.Position, impulse);
+        var impulseMagnitudeSquared = impulse.X * impulse.X + impulse.Y * impulse.Y +
+                                      angularImpulse * angularImpulse;
+        if (IsSleeping && impulseMagnitudeSquared > CollisionWakeThresholdSquared) WakeUp();
 
         _velocity += impulse * InverseMass;
+        _angularVelocity += angularImpulse * InverseMomentOfInertia;
         ClampVelocity();
+        ClampAngularVelocity();
+    }
+
+    internal Vector2D<double> GetVelocityAtPoint(Vector2D<double> worldPoint)
+    {
+        var radius = worldPoint - Owner.Position;
+        return _velocity + new Vector2D<double>(-_angularVelocity * radius.Y, _angularVelocity * radius.X);
     }
 
     internal void ApplyPositionCorrection(Vector2D<double> correction)
@@ -293,7 +456,8 @@ public sealed class RigidBody2D : GameComponent
         }
 
         var speedSquared = _velocity.X * _velocity.X + _velocity.Y * _velocity.Y;
-        if (speedSquared > SleepVelocityThreshold * SleepVelocityThreshold)
+        if (speedSquared > SleepVelocityThreshold * SleepVelocityThreshold ||
+            Math.Abs(_angularVelocity) > SleepAngularVelocityThreshold)
         {
             IsSleeping = false;
             _sleepTimer = 0.0;
@@ -322,6 +486,14 @@ public sealed class RigidBody2D : GameComponent
             throw new ArgumentOutOfRangeException(parameterName, "Vector components must be finite.");
     }
 
+    private static void EnsureFinite(double value, string parameterName, string message)
+    {
+        if (!double.IsFinite(value)) throw new ArgumentOutOfRangeException(parameterName, message);
+    }
+
+    private static double Cross(Vector2D<double> first, Vector2D<double> second) =>
+        first.X * second.Y - first.Y * second.X;
+
     private void ClampVelocity()
     {
         if (double.IsPositiveInfinity(MaximumSpeed)) return;
@@ -331,5 +503,22 @@ public sealed class RigidBody2D : GameComponent
         if (speedSquared <= maximumSpeedSquared) return;
 
         _velocity *= MaximumSpeed / Math.Sqrt(speedSquared);
+    }
+
+    private void ClampAngularVelocity()
+    {
+        if (FixedRotation)
+        {
+            _angularVelocity = 0.0;
+            return;
+        }
+
+        if (double.IsPositiveInfinity(MaximumAngularSpeed) ||
+            Math.Abs(_angularVelocity) <= MaximumAngularSpeed)
+        {
+            return;
+        }
+
+        _angularVelocity = Math.CopySign(MaximumAngularSpeed, _angularVelocity);
     }
 }

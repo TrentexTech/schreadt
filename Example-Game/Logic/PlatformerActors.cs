@@ -129,6 +129,7 @@ internal sealed class PlayerAvatar : Actor
             Friction = 0.18,
             LinearDamping = 0.05,
             MaximumSpeed = 7,
+            FixedRotation = true,
             AllowSleep = false
         });
         AddComponent(new CircleCollider2D(PlayerRadius)
@@ -411,6 +412,7 @@ internal sealed class PushableCrate : Rectangle2D
             Friction = 0.8,
             LinearDamping = 1.4,
             MaximumSpeed = 4.5,
+            FixedRotation = true,
             AllowSleep = true
         });
         Collider = AddComponent(new AxisAlignedBoxCollider2D(Size)

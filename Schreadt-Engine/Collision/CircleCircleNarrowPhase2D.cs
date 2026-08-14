@@ -28,7 +28,10 @@ public sealed class CircleCircleNarrowPhase2D
             ? offset / distance
             : new Vector2D<double>(1.0, 0.0);
 
-        result = new CollisionResult2D(normal, combinedRadius - distance);
+        var penetration = combinedRadius - distance;
+        var firstSurface = first.Center + normal * first.Radius;
+        var secondSurface = second.Center - normal * second.Radius;
+        result = new CollisionResult2D(normal, penetration, (firstSurface + secondSurface) * 0.5);
         return true;
     }
 }

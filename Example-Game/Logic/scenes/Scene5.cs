@@ -94,6 +94,7 @@ internal sealed class ProvisionalRotatingBeam : Rectangle2D
     private readonly double _centerRotation;
     private readonly double _rotationAmplitude;
     private readonly double _angularFrequency;
+    private readonly double _cycleDuration;
     private double _elapsed;
 
     internal RigidBody2D Body { get; }
@@ -116,6 +117,7 @@ internal sealed class ProvisionalRotatingBeam : Rectangle2D
         _centerRotation = (minimumRotation + maximumRotation) * 0.5;
         _rotationAmplitude = (maximumRotation - minimumRotation) * 0.5;
         _angularFrequency = Math.Tau / cycleDuration;
+        _cycleDuration = cycleDuration;
         RotationRadians = _centerRotation;
         Color = new Vector4D<float>(0.56f, 0.34f, 0.78f, 1.0f);
         RenderLayer = 12;
@@ -131,8 +133,15 @@ internal sealed class ProvisionalRotatingBeam : Rectangle2D
     protected override void OnFixedUpdate(double dt)
     {
         base.OnFixedUpdate(dt);
-        _elapsed = (_elapsed + dt) % (Math.Tau / _angularFrequency);
-        RotationRadians = _centerRotation + Math.Sin(_elapsed * _angularFrequency) * _rotationAmplitude;
+        if (dt <= 0.0)
+        {
+            Body.AngularVelocity = 0.0;
+            return;
+        }
+
+        _elapsed = (_elapsed + dt) % _cycleDuration;
+        var targetRotation = _centerRotation + Math.Sin(_elapsed * _angularFrequency) * _rotationAmplitude;
+        Body.AngularVelocity = (targetRotation - RotationRadians) / dt;
     }
 }
 
@@ -143,6 +152,7 @@ internal sealed class ProvisionalOrientedCrate : Rectangle2D
 
     internal ProvisionalOrientedCrate(double rotation)
     {
+        const double mass = 0.8;
         Size = new Vector2D<double>(0.62, 0.46);
         RotationRadians = rotation;
         Color = new Vector4D<float>(0.86f, 0.52f, 0.16f, 1.0f);
@@ -150,11 +160,14 @@ internal sealed class ProvisionalOrientedCrate : Rectangle2D
         Body = AddComponent(new RigidBody2D
         {
             BodyType = CollisionBodyType2D.Dynamic,
-            Mass = 0.8,
+            Mass = mass,
+            MomentOfInertia = PhysicsInertia2D.ForSolidBox(mass, Size),
             Friction = 0.7,
             Restitution = 0.05,
             LinearDamping = 0.8,
-            MaximumSpeed = 4.5
+            AngularDamping = 1.2,
+            MaximumSpeed = 4.5,
+            MaximumAngularSpeed = 7.0
         });
         Collider = AddComponent(new OrientedBoxCollider2D(Size)
         {

@@ -701,9 +701,30 @@ public sealed class CollisionWorld2D
         }
 
         ValidateResult(result, narrowPhase);
+        var firstContactPoint = result.ContactPointCount >= 1
+            ? result.GetContactPoint(0)
+            : (handlerFirst.Center + handlerSecond.Center) * 0.5;
+        var secondContactPoint = result.ContactPointCount >= 2
+            ? result.GetContactPoint(1)
+            : default;
+        var contactPointCount = Math.Max(1, result.ContactPointCount);
         manifold = reverseResult
-            ? new CollisionManifold(handlerSecond, handlerFirst, -result.Normal, result.Penetration)
-            : new CollisionManifold(handlerFirst, handlerSecond, result.Normal, result.Penetration);
+            ? new CollisionManifold(
+                handlerSecond,
+                handlerFirst,
+                -result.Normal,
+                result.Penetration,
+                contactPointCount,
+                firstContactPoint,
+                secondContactPoint)
+            : new CollisionManifold(
+                handlerFirst,
+                handlerSecond,
+                result.Normal,
+                result.Penetration,
+                contactPointCount,
+                firstContactPoint,
+                secondContactPoint);
         return true;
     }
 
@@ -732,34 +753,52 @@ public sealed class CollisionWorld2D
         if (secondCorrectionShare > 0)
             secondBody.ApplyPositionCorrection(correction * secondCorrectionShare);
 
+        for (var index = 0; index < manifold.ContactPointCount; index++)
+            ResolveVelocityAtContact(manifold, manifold.GetContactPoint(index));
+    }
+
+    private static void ResolveVelocityAtContact(CollisionManifold manifold, Vector2D<double> contactPoint)
+    {
+        var firstBody = manifold.First.Body;
+        var secondBody = manifold.Second.Body;
+        var firstRadius = contactPoint - firstBody.Owner.Position;
+        var secondRadius = contactPoint - secondBody.Owner.Position;
         var firstInverseMass = firstBody.InverseMass;
         var secondInverseMass = secondBody.InverseMass;
-        var totalInverseMass = firstInverseMass + secondInverseMass;
+        var firstNormalLever = Cross(firstRadius, manifold.Normal);
+        var secondNormalLever = Cross(secondRadius, manifold.Normal);
+        var normalDenominator = firstInverseMass + secondInverseMass +
+                                firstNormalLever * firstNormalLever * firstBody.InverseMomentOfInertia +
+                                secondNormalLever * secondNormalLever * secondBody.InverseMomentOfInertia;
+        if (normalDenominator <= 0.0) return;
 
-        if (totalInverseMass <= 0) return;
-
-        var relativeVelocity = secondBody.Velocity - firstBody.Velocity;
-        var velocityAlongNormal = relativeVelocity.X * manifold.Normal.X
-                                  + relativeVelocity.Y * manifold.Normal.Y;
-
-        if (velocityAlongNormal >= 0) return;
+        var relativeVelocity = secondBody.GetVelocityAtPoint(contactPoint) -
+                               firstBody.GetVelocityAtPoint(contactPoint);
+        var velocityAlongNormal = Dot(relativeVelocity, manifold.Normal);
+        if (velocityAlongNormal >= 0.0) return;
 
         var restitution = Math.Max(firstBody.Restitution, secondBody.Restitution);
-        var normalImpulseMagnitude = -(1.0 + restitution) * velocityAlongNormal / totalInverseMass;
+        var normalImpulseMagnitude = -(1.0 + restitution) * velocityAlongNormal / normalDenominator;
         var normalImpulse = manifold.Normal * normalImpulseMagnitude;
+        firstBody.ApplyCollisionImpulseAtPoint(-normalImpulse, contactPoint);
+        secondBody.ApplyCollisionImpulseAtPoint(normalImpulse, contactPoint);
 
-        firstBody.ApplyCollisionImpulse(-normalImpulse);
-        secondBody.ApplyCollisionImpulse(normalImpulse);
-
-        relativeVelocity = secondBody.Velocity - firstBody.Velocity;
+        relativeVelocity = secondBody.GetVelocityAtPoint(contactPoint) -
+                           firstBody.GetVelocityAtPoint(contactPoint);
         var remainingNormalVelocity = Dot(relativeVelocity, manifold.Normal);
         var tangentVelocity = relativeVelocity - manifold.Normal * remainingNormalVelocity;
         var tangentLengthSquared = Dot(tangentVelocity, tangentVelocity);
-
         if (tangentLengthSquared <= double.Epsilon) return;
 
         var tangent = tangentVelocity / Math.Sqrt(tangentLengthSquared);
-        var tangentImpulseMagnitude = -Dot(relativeVelocity, tangent) / totalInverseMass;
+        var firstTangentLever = Cross(firstRadius, tangent);
+        var secondTangentLever = Cross(secondRadius, tangent);
+        var tangentDenominator = firstInverseMass + secondInverseMass +
+                                 firstTangentLever * firstTangentLever * firstBody.InverseMomentOfInertia +
+                                 secondTangentLever * secondTangentLever * secondBody.InverseMomentOfInertia;
+        if (tangentDenominator <= 0.0) return;
+
+        var tangentImpulseMagnitude = -Dot(relativeVelocity, tangent) / tangentDenominator;
         var combinedFriction = Math.Sqrt(firstBody.Friction * secondBody.Friction);
         var maximumFrictionImpulse = normalImpulseMagnitude * combinedFriction;
         tangentImpulseMagnitude = Math.Clamp(
@@ -767,9 +806,8 @@ public sealed class CollisionWorld2D
             -maximumFrictionImpulse,
             maximumFrictionImpulse);
         var frictionImpulse = tangent * tangentImpulseMagnitude;
-
-        firstBody.ApplyCollisionImpulse(-frictionImpulse);
-        secondBody.ApplyCollisionImpulse(frictionImpulse);
+        firstBody.ApplyCollisionImpulseAtPoint(-frictionImpulse, contactPoint);
+        secondBody.ApplyCollisionImpulseAtPoint(frictionImpulse, contactPoint);
     }
 
     private static (double First, double Second) GetCorrectionShares(
@@ -803,6 +841,9 @@ public sealed class CollisionWorld2D
         return first.X * second.X + first.Y * second.Y;
     }
 
+    private static double Cross(Vector2D<double> first, Vector2D<double> second) =>
+        first.X * second.Y - first.Y * second.X;
+
     private static void NotifyEntered(CollisionManifold manifold)
     {
         manifold.First.NotifyEntered(CreateContactForFirst(manifold));
@@ -823,12 +864,20 @@ public sealed class CollisionWorld2D
 
     private static CollisionContact2D CreateContactForFirst(CollisionManifold manifold)
     {
-        return new CollisionContact2D(manifold.Second, manifold.Normal, manifold.Penetration);
+        return new CollisionContact2D(
+            manifold.Second,
+            manifold.Normal,
+            manifold.Penetration,
+            manifold.GetContactPoint(0));
     }
 
     private static CollisionContact2D CreateContactForSecond(CollisionManifold manifold)
     {
-        return new CollisionContact2D(manifold.First, -manifold.Normal, manifold.Penetration);
+        return new CollisionContact2D(
+            manifold.First,
+            -manifold.Normal,
+            manifold.Penetration,
+            manifold.GetContactPoint(0));
     }
 
     private readonly record struct ColliderPair(long FirstId, long SecondId)
@@ -840,7 +889,21 @@ public sealed class CollisionWorld2D
         Collider2D First,
         Collider2D Second,
         Vector2D<double> Normal,
-        double Penetration);
+        double Penetration,
+        int ContactPointCount,
+        Vector2D<double> FirstContactPoint,
+        Vector2D<double> SecondContactPoint)
+    {
+        internal Vector2D<double> GetContactPoint(int index)
+        {
+            return index switch
+            {
+                0 when ContactPointCount >= 1 => FirstContactPoint,
+                1 when ContactPointCount >= 2 => SecondContactPoint,
+                _ => throw new ArgumentOutOfRangeException(nameof(index))
+            };
+        }
+    }
 
     private interface INarrowPhaseRegistration
     {

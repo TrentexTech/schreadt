@@ -37,7 +37,8 @@ internal static class BoxCollisionGeometry2D
         }
 
         var direction = Dot(centerOffset, minimumAxis) < 0.0 ? -minimumAxis : minimumAxis;
-        result = new CollisionResult2D(direction, minimumOverlap);
+        var contactPoint = CalculateContactPoint(first, second, direction);
+        result = new CollisionResult2D(direction, minimumOverlap, contactPoint);
         return true;
 
         bool TestAxis(Vector2D<double> axis)
@@ -81,7 +82,12 @@ internal static class BoxCollisionGeometry2D
         if (distanceSquared > double.Epsilon)
         {
             var distance = Math.Sqrt(distanceSquared);
-            result = new CollisionResult2D(offsetToBox / distance, circle.Radius - distance);
+            var outsideNormal = offsetToBox / distance;
+            var circleSurface = circle.Center + outsideNormal * circle.Radius;
+            result = new CollisionResult2D(
+                outsideNormal,
+                circle.Radius - distance,
+                (circleSurface + closestWorld) * 0.5);
             return true;
         }
 
@@ -111,7 +117,12 @@ internal static class BoxCollisionGeometry2D
             normal = -box.AxisY;
         }
 
-        result = new CollisionResult2D(normal, circle.Radius + distanceToFace);
+        var boxSurface = circle.Center - normal * distanceToFace;
+        var circleSurfaceInside = circle.Center - normal * circle.Radius;
+        result = new CollisionResult2D(
+            normal,
+            circle.Radius + distanceToFace,
+            (boxSurface + circleSurfaceInside) * 0.5);
         return true;
     }
 
@@ -131,6 +142,85 @@ internal static class BoxCollisionGeometry2D
             Math.Clamp(localCenter.Y, -box.HalfSize.Y, box.HalfSize.Y));
         var difference = localCenter - closest;
         return Dot(difference, difference) <= radius * radius;
+    }
+
+    private static Vector2D<double> CalculateContactPoint(
+        BoxGeometry2D first,
+        BoxGeometry2D second,
+        Vector2D<double> normal)
+    {
+        Span<Vector2D<double>> firstFeature = stackalloc Vector2D<double>[2];
+        Span<Vector2D<double>> secondFeature = stackalloc Vector2D<double>[2];
+        var firstFeatureCount = GetSupportFeature(first, normal, firstFeature);
+        var secondFeatureCount = GetSupportFeature(second, -normal, secondFeature);
+
+        if (firstFeatureCount == 1)
+        {
+            var secondPoint = secondFeatureCount == 1
+                ? secondFeature[0]
+                : ClosestPointOnSegment(firstFeature[0], secondFeature[0], secondFeature[1]);
+            return (firstFeature[0] + secondPoint) * 0.5;
+        }
+
+        if (secondFeatureCount == 1)
+        {
+            var firstPoint = ClosestPointOnSegment(secondFeature[0], firstFeature[0], firstFeature[1]);
+            return (firstPoint + secondFeature[0]) * 0.5;
+        }
+
+        var tangent = new Vector2D<double>(-normal.Y, normal.X);
+        var firstNormalMaximum = Dot(firstFeature[0], normal);
+        var secondNormalMinimum = Dot(secondFeature[0], normal);
+        var normalCoordinate = (firstNormalMaximum + secondNormalMinimum) * 0.5;
+        var tangentMinimum = Math.Max(
+            Math.Min(Dot(firstFeature[0], tangent), Dot(firstFeature[1], tangent)),
+            Math.Min(Dot(secondFeature[0], tangent), Dot(secondFeature[1], tangent)));
+        var tangentMaximum = Math.Min(
+            Math.Max(Dot(firstFeature[0], tangent), Dot(firstFeature[1], tangent)),
+            Math.Max(Dot(secondFeature[0], tangent), Dot(secondFeature[1], tangent)));
+        var tangentCoordinate = (tangentMinimum + tangentMaximum) * 0.5;
+
+        return normal * normalCoordinate + tangent * tangentCoordinate;
+    }
+
+    private static int GetSupportFeature(
+        BoxGeometry2D box,
+        Vector2D<double> direction,
+        Span<Vector2D<double>> feature)
+    {
+        Span<Vector2D<double>> vertices = stackalloc Vector2D<double>[4];
+        var horizontal = box.AxisX * box.HalfSize.X;
+        var vertical = box.AxisY * box.HalfSize.Y;
+        vertices[0] = box.Center - horizontal - vertical;
+        vertices[1] = box.Center + horizontal - vertical;
+        vertices[2] = box.Center + horizontal + vertical;
+        vertices[3] = box.Center - horizontal + vertical;
+
+        var maximumProjection = double.NegativeInfinity;
+        for (var index = 0; index < vertices.Length; index++)
+            maximumProjection = Math.Max(maximumProjection, Dot(vertices[index], direction));
+
+        var count = 0;
+        for (var index = 0; index < vertices.Length && count < feature.Length; index++)
+        {
+            if (maximumProjection - Dot(vertices[index], direction) <= 1e-10)
+                feature[count++] = vertices[index];
+        }
+
+        return count;
+    }
+
+    private static Vector2D<double> ClosestPointOnSegment(
+        Vector2D<double> point,
+        Vector2D<double> start,
+        Vector2D<double> end)
+    {
+        var segment = end - start;
+        var lengthSquared = Dot(segment, segment);
+        if (lengthSquared <= double.Epsilon) return start;
+
+        var amount = Math.Clamp(Dot(point - start, segment) / lengthSquared, 0.0, 1.0);
+        return start + segment * amount;
     }
 
     private static double ProjectionRadius(BoxGeometry2D box, Vector2D<double> axis)

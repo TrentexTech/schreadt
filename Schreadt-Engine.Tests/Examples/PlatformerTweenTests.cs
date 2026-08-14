@@ -300,7 +300,7 @@ public sealed class PlatformerTweenTests
         Assert.False(entered);
 
         beam.FixedUpdate(1.0);
-        scene.Collisions.Step(0.0);
+        scene.Collisions.Step(1.0);
 
         Assert.True(entered);
         Assert.Equal(Math.PI / 2.0, beam.RotationRadians, 10);
@@ -343,6 +343,25 @@ public sealed class PlatformerTweenTests
         Assert.Equal(crate.RotationRadians, crate.Collider.WorldRotation, 10);
         Assert.True(crate.Collider.CollisionMask.Contains(ExampleCollisionLayers.Player));
         Assert.True(crate.Collider.CollisionMask.Contains(ExampleCollisionLayers.World));
+    }
+
+    [Fact]
+    public void ProvisionalOrientedCrate_RotatesAfterOffCenterImpulse()
+    {
+        var crate = new ProvisionalOrientedCrate(0.35);
+        var scene = new Scene("oriented-crate-angular-test", new EmptySceneLogic());
+        scene.Collisions.Gravity = Vector2D<double>.Zero;
+        scene.AddChild(crate);
+        scene.Init();
+        var initialRotation = crate.RotationRadians;
+
+        crate.Body.AddImpulseAtPoint(
+            new Vector2D<double>(0.0, 0.5),
+            crate.Position + Vector2D<double>.UnitX * crate.Size.X * 0.5);
+        scene.Collisions.Step(0.1);
+
+        Assert.NotEqual(initialRotation, crate.RotationRadians);
+        Assert.Equal(crate.RotationRadians, crate.Collider.WorldRotation, 10);
     }
 
     [Fact]
