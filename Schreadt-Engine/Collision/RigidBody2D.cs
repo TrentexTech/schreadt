@@ -12,8 +12,6 @@ public enum CollisionBodyType2D
 
 public sealed class RigidBody2D : GameComponent
 {
-    private const double CollisionWakeThresholdSquared = 1e-10;
-
     private CollisionBodyType2D _bodyType;
     private Vector2D<double> _velocity;
     private Vector2D<double> _accumulatedForce;
@@ -414,13 +412,9 @@ public sealed class RigidBody2D : GameComponent
 
     internal void ApplyCollisionImpulseAtPoint(Vector2D<double> impulse, Vector2D<double> worldPoint)
     {
-        if (BodyType != CollisionBodyType2D.Dynamic) return;
+        if (BodyType != CollisionBodyType2D.Dynamic || IsSleeping) return;
 
         var angularImpulse = FixedRotation ? 0.0 : Cross(worldPoint - Owner.Position, impulse);
-        var impulseMagnitudeSquared = impulse.X * impulse.X + impulse.Y * impulse.Y +
-                                      angularImpulse * angularImpulse;
-        if (IsSleeping && impulseMagnitudeSquared > CollisionWakeThresholdSquared) WakeUp();
-
         _velocity += impulse * InverseMass;
         _angularVelocity += angularImpulse * InverseMomentOfInertia;
         ClampVelocity();
@@ -433,17 +427,17 @@ public sealed class RigidBody2D : GameComponent
         return _velocity + new Vector2D<double>(-_angularVelocity * radius.Y, _angularVelocity * radius.X);
     }
 
-    internal void ApplyPositionCorrection(Vector2D<double> correction)
+    internal void ApplyPositionImpulseAtPoint(Vector2D<double> impulse, Vector2D<double> worldPoint)
     {
-        if (correction == Vector2D<double>.Zero) return;
+        if (BodyType != CollisionBodyType2D.Dynamic || IsSleeping) return;
 
-        if (IsSleeping)
-        {
-            var correctionLengthSquared = correction.X * correction.X + correction.Y * correction.Y;
-            if (correctionLengthSquared > CollisionWakeThresholdSquared) WakeUp();
-        }
-
-        Owner.Move(correction);
+        var radius = worldPoint - Owner.Position;
+        var angularCorrection = FixedRotation
+            ? 0.0
+            : Cross(radius, impulse) * InverseMomentOfInertia;
+        Owner.Move(impulse * InverseMass);
+        if (angularCorrection != 0.0)
+            Owner.Transform.SetWorldRotation(Owner.Transform.WorldRotation + angularCorrection);
     }
 
     internal void EndPhysicsStep(double dt)

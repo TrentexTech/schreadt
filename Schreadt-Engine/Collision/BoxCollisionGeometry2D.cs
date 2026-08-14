@@ -37,8 +37,15 @@ internal static class BoxCollisionGeometry2D
         }
 
         var direction = Dot(centerOffset, minimumAxis) < 0.0 ? -minimumAxis : minimumAxis;
-        var contactPoint = CalculateContactPoint(first, second, direction);
-        result = new CollisionResult2D(direction, minimumOverlap, contactPoint);
+        var contactPointCount = CalculateContactPoints(
+            first,
+            second,
+            direction,
+            out var firstContactPoint,
+            out var secondContactPoint);
+        result = contactPointCount == 2
+            ? new CollisionResult2D(direction, minimumOverlap, firstContactPoint, secondContactPoint)
+            : new CollisionResult2D(direction, minimumOverlap, firstContactPoint);
         return true;
 
         bool TestAxis(Vector2D<double> axis)
@@ -144,10 +151,12 @@ internal static class BoxCollisionGeometry2D
         return Dot(difference, difference) <= radius * radius;
     }
 
-    private static Vector2D<double> CalculateContactPoint(
+    private static int CalculateContactPoints(
         BoxGeometry2D first,
         BoxGeometry2D second,
-        Vector2D<double> normal)
+        Vector2D<double> normal,
+        out Vector2D<double> firstContactPoint,
+        out Vector2D<double> secondContactPoint)
     {
         Span<Vector2D<double>> firstFeature = stackalloc Vector2D<double>[2];
         Span<Vector2D<double>> secondFeature = stackalloc Vector2D<double>[2];
@@ -159,13 +168,17 @@ internal static class BoxCollisionGeometry2D
             var secondPoint = secondFeatureCount == 1
                 ? secondFeature[0]
                 : ClosestPointOnSegment(firstFeature[0], secondFeature[0], secondFeature[1]);
-            return (firstFeature[0] + secondPoint) * 0.5;
+            firstContactPoint = (firstFeature[0] + secondPoint) * 0.5;
+            secondContactPoint = default;
+            return 1;
         }
 
         if (secondFeatureCount == 1)
         {
             var firstPoint = ClosestPointOnSegment(secondFeature[0], firstFeature[0], firstFeature[1]);
-            return (firstPoint + secondFeature[0]) * 0.5;
+            firstContactPoint = (firstPoint + secondFeature[0]) * 0.5;
+            secondContactPoint = default;
+            return 1;
         }
 
         var tangent = new Vector2D<double>(-normal.Y, normal.X);
@@ -178,9 +191,16 @@ internal static class BoxCollisionGeometry2D
         var tangentMaximum = Math.Min(
             Math.Max(Dot(firstFeature[0], tangent), Dot(firstFeature[1], tangent)),
             Math.Max(Dot(secondFeature[0], tangent), Dot(secondFeature[1], tangent)));
-        var tangentCoordinate = (tangentMinimum + tangentMaximum) * 0.5;
 
-        return normal * normalCoordinate + tangent * tangentCoordinate;
+        firstContactPoint = normal * normalCoordinate + tangent * tangentMinimum;
+        if (tangentMaximum - tangentMinimum <= 1e-10)
+        {
+            secondContactPoint = default;
+            return 1;
+        }
+
+        secondContactPoint = normal * normalCoordinate + tangent * tangentMaximum;
+        return 2;
     }
 
     private static int GetSupportFeature(

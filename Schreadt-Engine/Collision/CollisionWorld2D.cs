@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Schreadt_Engine.Core;
 using Silk.NET.Maths;
 
@@ -5,6 +6,14 @@ namespace Schreadt_Engine.Collision;
 
 public sealed class CollisionWorld2D
 {
+    private const int MinimumSolverIterationCount = 1;
+    private const int MaximumSolverIterationCount = 32;
+    private const double SleepingContactWakeSpeed = 0.25;
+    private const double SleepingContactWakePenetration = 0.02;
+    private const double PositionCorrectionSlop = 0.005;
+    private const double PositionCorrectionFraction = 0.8;
+    private const double RestitutionVelocityThreshold = 1.0;
+
     private readonly record struct ShapePair(Type First, Type Second);
 
     private readonly List<Collider2D> _colliders = [];
@@ -14,6 +23,9 @@ public sealed class CollisionWorld2D
     private Vector2D<double> _gravity = new(0.0, -9.81);
     private int _lastPairCheckCount;
     private int _lastNarrowPhaseTestCount;
+    private int _positionIterations = 3;
+    private int _velocityIterations = 8;
+    private double _lastSolverMilliseconds;
 
     public CollisionWorld2D()
     {
@@ -37,7 +49,25 @@ public sealed class CollisionWorld2D
         _bodies.Count,
         _lastPairCheckCount,
         _lastNarrowPhaseTestCount,
-        _activePairs.Count);
+        _activePairs.Count,
+        _activePairs.Values.Sum(static manifold => manifold.ContactPointCount),
+        PositionIterations,
+        VelocityIterations,
+        _lastSolverMilliseconds);
+
+    /// <summary>Number of deterministic penetration-correction passes performed per fixed step.</summary>
+    public int PositionIterations
+    {
+        get => _positionIterations;
+        set => _positionIterations = ValidateSolverIterationCount(value, nameof(value));
+    }
+
+    /// <summary>Number of deterministic sequential-impulse passes performed per fixed step.</summary>
+    public int VelocityIterations
+    {
+        get => _velocityIterations;
+        set => _velocityIterations = ValidateSolverIterationCount(value, nameof(value));
+    }
 
     public Vector2D<double> Gravity
     {
@@ -316,6 +346,8 @@ public sealed class CollisionWorld2D
         _lastPairCheckCount = 0;
         _lastNarrowPhaseTestCount = 0;
         var currentPairs = new Dictionary<ColliderPair, CollisionManifold>();
+        var currentPairOrder = new List<ColliderPair>();
+        var currentManifolds = new List<CollisionManifold>();
         var colliders = _colliders.ToArray();
 
         for (var firstIndex = 0; firstIndex < colliders.Length; firstIndex++)
@@ -333,20 +365,39 @@ public sealed class CollisionWorld2D
                 _lastNarrowPhaseTestCount++;
                 if (!TryCreateManifold(first, second, out var manifold)) continue;
 
-                Resolve(manifold);
-
                 var pair = new ColliderPair(first.Id, second.Id);
                 currentPairs.Add(pair, manifold);
-
-                if (_activePairs.ContainsKey(pair))
-                {
-                    NotifyStayed(manifold);
-                }
-                else
-                {
-                    NotifyEntered(manifold);
-                }
+                currentPairOrder.Add(pair);
+                currentManifolds.Add(manifold);
             }
+        }
+
+        var solverTimer = Stopwatch.StartNew();
+        WakeSleepingBodiesForMeaningfulContacts(currentManifolds);
+        var positionIterationShare = 1.0 / PositionIterations;
+        for (var iteration = 0; iteration < PositionIterations; iteration++)
+        {
+            foreach (var manifold in currentManifolds)
+                ResolvePosition(manifold, positionIterationShare);
+        }
+
+        var velocityConstraints = currentManifolds
+            .Select(CreateVelocityConstraint)
+            .ToArray();
+        for (var iteration = 0; iteration < VelocityIterations; iteration++)
+        {
+            foreach (var constraint in velocityConstraints)
+                ResolveVelocity(constraint);
+        }
+
+        solverTimer.Stop();
+        _lastSolverMilliseconds = solverTimer.Elapsed.TotalMilliseconds;
+
+        foreach (var pair in currentPairOrder)
+        {
+            var manifold = currentPairs[pair];
+            if (_activePairs.ContainsKey(pair)) NotifyStayed(manifold);
+            else NotifyEntered(manifold);
         }
 
         foreach (var (pair, previousManifold) in _activePairs)
@@ -382,6 +433,7 @@ public sealed class CollisionWorld2D
         _bodies.Clear();
         _lastPairCheckCount = 0;
         _lastNarrowPhaseTestCount = 0;
+        _lastSolverMilliseconds = 0.0;
     }
 
     internal void DrawDiagnostics(IRenderContext2D renderer)
@@ -739,102 +791,316 @@ public sealed class CollisionWorld2D
         }
     }
 
-    private static void Resolve(CollisionManifold manifold)
+    private static void ResolvePosition(CollisionManifold manifold, double iterationShare)
     {
         if (manifold.First.IsTrigger || manifold.Second.IsTrigger) return;
 
         var firstBody = manifold.First.Body;
         var secondBody = manifold.Second.Body;
-        var (firstCorrectionShare, secondCorrectionShare) = GetCorrectionShares(firstBody, secondBody);
-        var correction = manifold.Normal * manifold.Penetration;
+        var correctedPenetration = Math.Max(manifold.Penetration - PositionCorrectionSlop, 0.0) *
+                                   PositionCorrectionFraction;
+        if (correctedPenetration <= 0.0) return;
 
-        if (firstCorrectionShare > 0)
-            firstBody.ApplyPositionCorrection(-correction * firstCorrectionShare);
-        if (secondCorrectionShare > 0)
-            secondBody.ApplyPositionCorrection(correction * secondCorrectionShare);
-
+        var correctionPerContact = correctedPenetration * iterationShare / manifold.ContactPointCount;
         for (var index = 0; index < manifold.ContactPointCount; index++)
-            ResolveVelocityAtContact(manifold, manifold.GetContactPoint(index));
+        {
+            var contactPoint = manifold.GetContactPoint(index);
+            var firstRadius = contactPoint - firstBody.Owner.Position;
+            var secondRadius = contactPoint - secondBody.Owner.Position;
+            var firstInverseMass = GetSolverInverseMass(firstBody);
+            var secondInverseMass = GetSolverInverseMass(secondBody);
+            var firstLever = Cross(firstRadius, manifold.Normal);
+            var secondLever = Cross(secondRadius, manifold.Normal);
+            var denominator = firstInverseMass + secondInverseMass +
+                              firstLever * firstLever * GetSolverInverseMomentOfInertia(firstBody) +
+                              secondLever * secondLever * GetSolverInverseMomentOfInertia(secondBody);
+            if (denominator <= 0.0) continue;
+
+            var correctionImpulse = manifold.Normal * (correctionPerContact / denominator);
+            firstBody.ApplyPositionImpulseAtPoint(-correctionImpulse, contactPoint);
+            secondBody.ApplyPositionImpulseAtPoint(correctionImpulse, contactPoint);
+        }
     }
 
-    private static void ResolveVelocityAtContact(CollisionManifold manifold, Vector2D<double> contactPoint)
+    private static void WakeSleepingBodiesForMeaningfulContacts(
+        IReadOnlyList<CollisionManifold> manifolds)
+    {
+        foreach (var manifold in manifolds)
+        {
+            if (manifold.First.IsTrigger || manifold.Second.IsTrigger) continue;
+
+            var firstBody = manifold.First.Body;
+            var secondBody = manifold.Second.Body;
+            var firstWasSleeping = firstBody.BodyType == CollisionBodyType2D.Dynamic && firstBody.IsSleeping;
+            var secondWasSleeping = secondBody.BodyType == CollisionBodyType2D.Dynamic && secondBody.IsSleeping;
+            if (firstWasSleeping == secondWasSleeping) continue;
+
+            var meaningfulPenetration = manifold.Penetration > SleepingContactWakePenetration;
+            var meaningfulVelocity = false;
+            for (var index = 0; index < manifold.ContactPointCount && !meaningfulVelocity; index++)
+            {
+                var contactPoint = manifold.GetContactPoint(index);
+                var relativeVelocity = secondBody.GetVelocityAtPoint(contactPoint) -
+                                       firstBody.GetVelocityAtPoint(contactPoint);
+                meaningfulVelocity = Dot(relativeVelocity, relativeVelocity) >
+                                     SleepingContactWakeSpeed * SleepingContactWakeSpeed;
+            }
+
+            if (!meaningfulPenetration && !meaningfulVelocity) continue;
+            if (firstWasSleeping) firstBody.WakeUp();
+            if (secondWasSleeping) secondBody.WakeUp();
+        }
+    }
+
+    private static VelocityConstraint CreateVelocityConstraint(CollisionManifold manifold)
+    {
+        var constraint = new VelocityConstraint(manifold);
+        if (manifold.First.IsTrigger || manifold.Second.IsTrigger) return constraint;
+
+        constraint.FirstContact.RestitutionVelocity = CalculateRestitutionVelocity(
+            manifold,
+            manifold.GetContactPoint(0));
+        if (manifold.ContactPointCount >= 2)
+        {
+            constraint.SecondContact.RestitutionVelocity = CalculateRestitutionVelocity(
+                manifold,
+                manifold.GetContactPoint(1));
+        }
+
+        return constraint;
+    }
+
+    private static double CalculateRestitutionVelocity(
+        CollisionManifold manifold,
+        Vector2D<double> contactPoint)
+    {
+        var relativeVelocity = manifold.Second.Body.GetVelocityAtPoint(contactPoint) -
+                               manifold.First.Body.GetVelocityAtPoint(contactPoint);
+        var velocityAlongNormal = Dot(relativeVelocity, manifold.Normal);
+        if (velocityAlongNormal >= -RestitutionVelocityThreshold) return 0.0;
+
+        var restitution = Math.Max(manifold.First.Body.Restitution, manifold.Second.Body.Restitution);
+        return -restitution * velocityAlongNormal;
+    }
+
+    private static void ResolveVelocity(VelocityConstraint constraint)
+    {
+        var manifold = constraint.Manifold;
+        if (manifold.First.IsTrigger || manifold.Second.IsTrigger) return;
+
+        if (manifold.ContactPointCount >= 2 && !TryResolveNormalBlock(constraint))
+        {
+            ResolveNormalAtContact(
+                manifold,
+                manifold.GetContactPoint(0),
+                ref constraint.FirstContact);
+            ResolveNormalAtContact(
+                manifold,
+                manifold.GetContactPoint(1),
+                ref constraint.SecondContact);
+        }
+        else if (manifold.ContactPointCount == 1)
+        {
+            ResolveNormalAtContact(
+                manifold,
+                manifold.GetContactPoint(0),
+                ref constraint.FirstContact);
+        }
+
+        ResolveFrictionAtContact(
+            manifold,
+            manifold.GetContactPoint(0),
+            ref constraint.FirstContact);
+        if (manifold.ContactPointCount >= 2)
+        {
+            ResolveFrictionAtContact(
+                manifold,
+                manifold.GetContactPoint(1),
+                ref constraint.SecondContact);
+        }
+    }
+
+    private static bool TryResolveNormalBlock(VelocityConstraint constraint)
+    {
+        var manifold = constraint.Manifold;
+        var firstBody = manifold.First.Body;
+        var secondBody = manifold.Second.Body;
+        var firstPoint = manifold.GetContactPoint(0);
+        var secondPoint = manifold.GetContactPoint(1);
+        var firstRadiusA = firstPoint - firstBody.Owner.Position;
+        var firstRadiusB = firstPoint - secondBody.Owner.Position;
+        var secondRadiusA = secondPoint - firstBody.Owner.Position;
+        var secondRadiusB = secondPoint - secondBody.Owner.Position;
+        var firstInverseMass = GetSolverInverseMass(firstBody);
+        var secondInverseMass = GetSolverInverseMass(secondBody);
+        var inverseMass = firstInverseMass + secondInverseMass;
+        var firstLeverA = Cross(firstRadiusA, manifold.Normal);
+        var firstLeverB = Cross(firstRadiusB, manifold.Normal);
+        var secondLeverA = Cross(secondRadiusA, manifold.Normal);
+        var secondLeverB = Cross(secondRadiusB, manifold.Normal);
+        var firstInverseInertia = GetSolverInverseMomentOfInertia(firstBody);
+        var secondInverseInertia = GetSolverInverseMomentOfInertia(secondBody);
+        var k11 = inverseMass +
+                  firstLeverA * firstLeverA * firstInverseInertia +
+                  firstLeverB * firstLeverB * secondInverseInertia;
+        var k22 = inverseMass +
+                  secondLeverA * secondLeverA * firstInverseInertia +
+                  secondLeverB * secondLeverB * secondInverseInertia;
+        var k12 = inverseMass +
+                  firstLeverA * secondLeverA * firstInverseInertia +
+                  firstLeverB * secondLeverB * secondInverseInertia;
+        var determinant = k11 * k22 - k12 * k12;
+        if (k11 <= 0.0 || k22 <= 0.0 || determinant <= 1e-12) return false;
+
+        var firstVelocity = secondBody.GetVelocityAtPoint(firstPoint) - firstBody.GetVelocityAtPoint(firstPoint);
+        var secondVelocity = secondBody.GetVelocityAtPoint(secondPoint) - firstBody.GetVelocityAtPoint(secondPoint);
+        var b1 = Dot(firstVelocity, manifold.Normal) - constraint.FirstContact.RestitutionVelocity;
+        var b2 = Dot(secondVelocity, manifold.Normal) - constraint.SecondContact.RestitutionVelocity;
+        var a1 = constraint.FirstContact.AccumulatedNormalImpulse;
+        var a2 = constraint.SecondContact.AccumulatedNormalImpulse;
+
+        var inverseDeterminant = 1.0 / determinant;
+        var delta1 = (-k22 * b1 + k12 * b2) * inverseDeterminant;
+        var delta2 = (k12 * b1 - k11 * b2) * inverseDeterminant;
+        var x1 = a1 + delta1;
+        var x2 = a2 + delta2;
+        if (x1 >= 0.0 && x2 >= 0.0)
+            return ApplyBlockNormalImpulses(constraint, firstPoint, secondPoint, x1, x2);
+
+        x1 = 0.0;
+        delta1 = -a1;
+        x2 = a2 - (b2 + k12 * delta1) / k22;
+        delta2 = x2 - a2;
+        var firstResultVelocity = b1 + k11 * delta1 + k12 * delta2;
+        if (x2 >= 0.0 && firstResultVelocity >= -1e-10)
+            return ApplyBlockNormalImpulses(constraint, firstPoint, secondPoint, x1, x2);
+
+        x2 = 0.0;
+        delta2 = -a2;
+        x1 = a1 - (b1 + k12 * delta2) / k11;
+        delta1 = x1 - a1;
+        var secondResultVelocity = b2 + k12 * delta1 + k22 * delta2;
+        if (x1 >= 0.0 && secondResultVelocity >= -1e-10)
+            return ApplyBlockNormalImpulses(constraint, firstPoint, secondPoint, x1, x2);
+
+        x1 = 0.0;
+        x2 = 0.0;
+        delta1 = -a1;
+        delta2 = -a2;
+        firstResultVelocity = b1 + k11 * delta1 + k12 * delta2;
+        secondResultVelocity = b2 + k12 * delta1 + k22 * delta2;
+        if (firstResultVelocity < -1e-10 || secondResultVelocity < -1e-10) return false;
+
+        return ApplyBlockNormalImpulses(constraint, firstPoint, secondPoint, x1, x2);
+    }
+
+    private static bool ApplyBlockNormalImpulses(
+        VelocityConstraint constraint,
+        Vector2D<double> firstPoint,
+        Vector2D<double> secondPoint,
+        double firstAccumulatedImpulse,
+        double secondAccumulatedImpulse)
+    {
+        var manifold = constraint.Manifold;
+        var firstIncrement = firstAccumulatedImpulse - constraint.FirstContact.AccumulatedNormalImpulse;
+        var secondIncrement = secondAccumulatedImpulse - constraint.SecondContact.AccumulatedNormalImpulse;
+        constraint.FirstContact.AccumulatedNormalImpulse = firstAccumulatedImpulse;
+        constraint.SecondContact.AccumulatedNormalImpulse = secondAccumulatedImpulse;
+
+        var firstImpulse = manifold.Normal * firstIncrement;
+        manifold.First.Body.ApplyCollisionImpulseAtPoint(-firstImpulse, firstPoint);
+        manifold.Second.Body.ApplyCollisionImpulseAtPoint(firstImpulse, firstPoint);
+        var secondImpulse = manifold.Normal * secondIncrement;
+        manifold.First.Body.ApplyCollisionImpulseAtPoint(-secondImpulse, secondPoint);
+        manifold.Second.Body.ApplyCollisionImpulseAtPoint(secondImpulse, secondPoint);
+        return true;
+    }
+
+    private static void ResolveNormalAtContact(
+        CollisionManifold manifold,
+        Vector2D<double> contactPoint,
+        ref ContactImpulseState impulseState)
     {
         var firstBody = manifold.First.Body;
         var secondBody = manifold.Second.Body;
         var firstRadius = contactPoint - firstBody.Owner.Position;
         var secondRadius = contactPoint - secondBody.Owner.Position;
-        var firstInverseMass = firstBody.InverseMass;
-        var secondInverseMass = secondBody.InverseMass;
+        var firstInverseMass = GetSolverInverseMass(firstBody);
+        var secondInverseMass = GetSolverInverseMass(secondBody);
         var firstNormalLever = Cross(firstRadius, manifold.Normal);
         var secondNormalLever = Cross(secondRadius, manifold.Normal);
         var normalDenominator = firstInverseMass + secondInverseMass +
-                                firstNormalLever * firstNormalLever * firstBody.InverseMomentOfInertia +
-                                secondNormalLever * secondNormalLever * secondBody.InverseMomentOfInertia;
+                                firstNormalLever * firstNormalLever * GetSolverInverseMomentOfInertia(firstBody) +
+                                secondNormalLever * secondNormalLever * GetSolverInverseMomentOfInertia(secondBody);
         if (normalDenominator <= 0.0) return;
 
         var relativeVelocity = secondBody.GetVelocityAtPoint(contactPoint) -
                                firstBody.GetVelocityAtPoint(contactPoint);
         var velocityAlongNormal = Dot(relativeVelocity, manifold.Normal);
-        if (velocityAlongNormal >= 0.0) return;
-
-        var restitution = Math.Max(firstBody.Restitution, secondBody.Restitution);
-        var normalImpulseMagnitude = -(1.0 + restitution) * velocityAlongNormal / normalDenominator;
+        var normalImpulseIncrement =
+            -(velocityAlongNormal - impulseState.RestitutionVelocity) / normalDenominator;
+        var previousNormalImpulse = impulseState.AccumulatedNormalImpulse;
+        impulseState.AccumulatedNormalImpulse = Math.Max(
+            previousNormalImpulse + normalImpulseIncrement,
+            0.0);
+        var normalImpulseMagnitude = impulseState.AccumulatedNormalImpulse - previousNormalImpulse;
         var normalImpulse = manifold.Normal * normalImpulseMagnitude;
         firstBody.ApplyCollisionImpulseAtPoint(-normalImpulse, contactPoint);
         secondBody.ApplyCollisionImpulseAtPoint(normalImpulse, contactPoint);
+    }
 
-        relativeVelocity = secondBody.GetVelocityAtPoint(contactPoint) -
-                           firstBody.GetVelocityAtPoint(contactPoint);
-        var remainingNormalVelocity = Dot(relativeVelocity, manifold.Normal);
-        var tangentVelocity = relativeVelocity - manifold.Normal * remainingNormalVelocity;
-        var tangentLengthSquared = Dot(tangentVelocity, tangentVelocity);
-        if (tangentLengthSquared <= double.Epsilon) return;
-
-        var tangent = tangentVelocity / Math.Sqrt(tangentLengthSquared);
+    private static void ResolveFrictionAtContact(
+        CollisionManifold manifold,
+        Vector2D<double> contactPoint,
+        ref ContactImpulseState impulseState)
+    {
+        var firstBody = manifold.First.Body;
+        var secondBody = manifold.Second.Body;
+        var firstRadius = contactPoint - firstBody.Owner.Position;
+        var secondRadius = contactPoint - secondBody.Owner.Position;
+        var firstInverseMass = GetSolverInverseMass(firstBody);
+        var secondInverseMass = GetSolverInverseMass(secondBody);
+        var relativeVelocity = secondBody.GetVelocityAtPoint(contactPoint) -
+                               firstBody.GetVelocityAtPoint(contactPoint);
+        var tangent = new Vector2D<double>(-manifold.Normal.Y, manifold.Normal.X);
         var firstTangentLever = Cross(firstRadius, tangent);
         var secondTangentLever = Cross(secondRadius, tangent);
         var tangentDenominator = firstInverseMass + secondInverseMass +
-                                 firstTangentLever * firstTangentLever * firstBody.InverseMomentOfInertia +
-                                 secondTangentLever * secondTangentLever * secondBody.InverseMomentOfInertia;
+                                 firstTangentLever * firstTangentLever * GetSolverInverseMomentOfInertia(firstBody) +
+                                 secondTangentLever * secondTangentLever * GetSolverInverseMomentOfInertia(secondBody);
         if (tangentDenominator <= 0.0) return;
 
-        var tangentImpulseMagnitude = -Dot(relativeVelocity, tangent) / tangentDenominator;
+        var tangentImpulseIncrement = -Dot(relativeVelocity, tangent) / tangentDenominator;
         var combinedFriction = Math.Sqrt(firstBody.Friction * secondBody.Friction);
-        var maximumFrictionImpulse = normalImpulseMagnitude * combinedFriction;
-        tangentImpulseMagnitude = Math.Clamp(
-            tangentImpulseMagnitude,
+        var maximumFrictionImpulse = impulseState.AccumulatedNormalImpulse * combinedFriction;
+        var previousTangentImpulse = impulseState.AccumulatedTangentImpulse;
+        impulseState.AccumulatedTangentImpulse = Math.Clamp(
+            previousTangentImpulse + tangentImpulseIncrement,
             -maximumFrictionImpulse,
             maximumFrictionImpulse);
+        var tangentImpulseMagnitude = impulseState.AccumulatedTangentImpulse - previousTangentImpulse;
         var frictionImpulse = tangent * tangentImpulseMagnitude;
         firstBody.ApplyCollisionImpulseAtPoint(-frictionImpulse, contactPoint);
         secondBody.ApplyCollisionImpulseAtPoint(frictionImpulse, contactPoint);
     }
 
-    private static (double First, double Second) GetCorrectionShares(
-        RigidBody2D first,
-        RigidBody2D second)
+    private static int ValidateSolverIterationCount(int value, string parameterName)
     {
-        if (first.BodyType == CollisionBodyType2D.Static)
+        if (value is < MinimumSolverIterationCount or > MaximumSolverIterationCount)
         {
-            return second.BodyType == CollisionBodyType2D.Static ? (0.0, 0.0) : (0.0, 1.0);
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                $"Solver iteration counts must be between {MinimumSolverIterationCount} and {MaximumSolverIterationCount}.");
         }
 
-        if (second.BodyType == CollisionBodyType2D.Static) return (1.0, 0.0);
-
-        if (first.BodyType == CollisionBodyType2D.Kinematic)
-        {
-            return second.BodyType == CollisionBodyType2D.Dynamic ? (0.0, 1.0) : (0.0, 0.0);
-        }
-
-        if (second.BodyType == CollisionBodyType2D.Kinematic) return (1.0, 0.0);
-
-        var firstInverseMass = first.InverseMass;
-        var secondInverseMass = second.InverseMass;
-        var totalInverseMass = firstInverseMass + secondInverseMass;
-        return totalInverseMass > 0
-            ? (firstInverseMass / totalInverseMass, secondInverseMass / totalInverseMass)
-            : (0.0, 0.0);
+        return value;
     }
+
+    private static double GetSolverInverseMass(RigidBody2D body) =>
+        body.IsSleeping ? 0.0 : body.InverseMass;
+
+    private static double GetSolverInverseMomentOfInertia(RigidBody2D body) =>
+        body.IsSleeping ? 0.0 : body.InverseMomentOfInertia;
 
     private static double Dot(Vector2D<double> first, Vector2D<double> second)
     {
@@ -903,6 +1169,20 @@ public sealed class CollisionWorld2D
                 _ => throw new ArgumentOutOfRangeException(nameof(index))
             };
         }
+    }
+
+    private sealed class VelocityConstraint(CollisionManifold manifold)
+    {
+        internal CollisionManifold Manifold { get; } = manifold;
+        internal ContactImpulseState FirstContact;
+        internal ContactImpulseState SecondContact;
+    }
+
+    private struct ContactImpulseState
+    {
+        internal double AccumulatedNormalImpulse;
+        internal double AccumulatedTangentImpulse;
+        internal double RestitutionVelocity;
     }
 
     private interface INarrowPhaseRegistration

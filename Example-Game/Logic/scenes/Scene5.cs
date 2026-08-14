@@ -18,7 +18,7 @@ internal sealed class Scene5 : PlatformerLevelLogic
 
     protected override Vector2D<double> SpawnPoint => new(0.0, -1.05);
 
-    protected override string HudNote => "PROVISIONAL: SLOPES, ROTATING BEAM, ORIENTED CRATE";
+    protected override string HudNote => "PROVISIONAL: SLOPES, ROTATING BEAM, CRATE STACK";
 
     protected override void BuildLevel()
     {
@@ -46,6 +46,8 @@ internal sealed class Scene5 : PlatformerLevelLogic
             Position = new Vector2D<double>(9.55, 0.95)
         });
 
+        AddStableCrateStack(13.0, -1.31);
+
         AddStar(3.9, -0.35);
         AddStar(7.0, 0.65);
         AddStar(10.8, 0.25);
@@ -60,6 +62,18 @@ internal sealed class Scene5 : PlatformerLevelLogic
         {
             Position = new Vector2D<double>(x, y)
         });
+    }
+
+    private void AddStableCrateStack(double x, double bottomY)
+    {
+        const double verticalSpacing = 0.47;
+        for (var index = 0; index < 3; index++)
+        {
+            Scene.AddChild(new ProvisionalOrientedCrate(0.0)
+            {
+                Position = new Vector2D<double>(x, bottomY + index * verticalSpacing)
+            });
+        }
     }
 }
 
@@ -167,7 +181,10 @@ internal sealed class ProvisionalOrientedCrate : Rectangle2D
             LinearDamping = 0.8,
             AngularDamping = 1.2,
             MaximumSpeed = 4.5,
-            MaximumAngularSpeed = 7.0
+            MaximumAngularSpeed = 7.0,
+            SleepVelocityThreshold = 0.08,
+            SleepAngularVelocityThreshold = 0.18,
+            TimeToSleep = 0.3
         });
         Collider = AddComponent(new OrientedBoxCollider2D(Size)
         {

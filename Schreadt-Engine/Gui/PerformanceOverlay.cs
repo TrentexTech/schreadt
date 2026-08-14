@@ -137,8 +137,9 @@ internal sealed class PerformanceOverlay
         _root.Simulation.Text = FormattableString.Invariant(
             $"SIM: {simulationState}  FIXED: {fixedStepCount}  SCALE: {runtime.TimeScale:F2}");
         _root.Physics.Text = FormattableString.Invariant($"""
-            PHYS: {collisions.ActiveColliderCount}/{collisions.RegisteredColliderCount}  CONTACT: {collisions.ContactCount}
+            PHYS: {collisions.ActiveColliderCount}/{collisions.RegisteredColliderCount}  CONTACT: {collisions.ContactCount}  POINTS: {collisions.ContactPointCount}
             CHECKS: {collisions.PairCheckCount} PAIR  {collisions.NarrowPhaseTestCount} NARROW
+            SOLVER: {collisions.VelocityIterationCount}V/{collisions.PositionIterationCount}P  {collisions.SolverMilliseconds:F2} MS
             """);
         _root.Display.Text = FormattableString.Invariant($"""
             WINDOW: {display.WindowSize.X}X{display.WindowSize.Y}  {display.WindowState.ToString().ToUpperInvariant()}  VSYNC: {(display.VSync ? "ON" : "OFF")}

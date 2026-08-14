@@ -377,8 +377,9 @@ public sealed class AngularPhysics2DTests
         var firstBox = CreateOrientedBox(Vector2D<double>.Zero, new Vector2D<double>(2.0, 2.0));
         var secondBox = CreateOrientedBox(new Vector2D<double>(1.5, 0.0), new Vector2D<double>(2.0, 2.0));
         Assert.True(new OrientedBoxOrientedBoxNarrowPhase2D().TryCollide(firstBox, secondBox, out var boxes));
-        Assert.Equal(1, boxes.ContactPointCount);
-        Assert.Equal(new Vector2D<double>(0.75, 0.0), boxes.GetContactPoint(0));
+        Assert.Equal(2, boxes.ContactPointCount);
+        Assert.Equal(new Vector2D<double>(0.75, -1.0), boxes.GetContactPoint(0));
+        Assert.Equal(new Vector2D<double>(0.75, 1.0), boxes.GetContactPoint(1));
     }
 
     [Fact]

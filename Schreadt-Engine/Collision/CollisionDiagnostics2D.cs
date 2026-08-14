@@ -9,7 +9,11 @@ public readonly record struct CollisionStatistics2D(
     int RigidBodyCount,
     int PairCheckCount,
     int NarrowPhaseTestCount,
-    int ContactCount);
+    int ContactCount,
+    int ContactPointCount = 0,
+    int PositionIterationCount = 1,
+    int VelocityIterationCount = 1,
+    double SolverMilliseconds = 0.0);
 
 public sealed class CollisionDebugDraw2D
 {
