@@ -44,7 +44,7 @@ public sealed class PerformanceOverlayTests
             1.0 / 60.0,
             runtime,
             fixedStepCount: 2,
-            new CollisionStatistics2D(10, 8, 3, 28, 12, 2, 3, 3, 8, 0.42),
+            new CollisionStatistics2D(10, 8, 3, 28, 12, 2, 3, 3, 8, 0.42, 4, 3),
             new RenderStatistics(14, 92, 276, 1, 1280L * 720 * 4),
             new FrameCompositionStatistics(
                 2.4,
@@ -76,7 +76,8 @@ public sealed class PerformanceOverlayTests
         Assert.Contains("PASS POST RAIN: 0.22 MS", text);
         Assert.Contains("PASS PREGUI SCREEN FLASH: 0.14 MS", text);
         Assert.Contains("SIM: RUNNING  FIXED: 2  SCALE: 1.00", text);
-        Assert.Contains("PHYS: 8/10  CONTACT: 2  POINTS: 3", text);
+        Assert.Contains("PHYS: 8/10  JOINT: 3/4", text);
+        Assert.Contains("CONTACT: 2  POINTS: 3", text);
         Assert.Contains("CHECKS: 28 PAIR  12 NARROW", text);
         Assert.Contains("SOLVER: 8V/3P  0.42 MS", text);
         Assert.Contains("WINDOW: 1280X720  MAXIMIZED  VSYNC: OFF", text);

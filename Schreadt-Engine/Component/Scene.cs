@@ -36,12 +36,16 @@ public class Scene : GameObject
 
     internal void RegisterComponent(GameComponent component)
     {
+        if (component is RigidBody2D body) Collisions.AddBody(body);
         if (component is Collider2D collider) Collisions.AddCollider(collider);
+        if (component is RevoluteJoint2D joint) Collisions.AddJoint(joint);
     }
 
     internal void UnregisterComponent(GameComponent component)
     {
+        if (component is RevoluteJoint2D joint) Collisions.RemoveJoint(joint);
         if (component is Collider2D collider) Collisions.RemoveCollider(collider);
+        if (component is RigidBody2D body) Collisions.RemoveBody(body);
     }
 
     public T AddCompositionPass<T>(T pass) where T : IFrameCompositionPass2D

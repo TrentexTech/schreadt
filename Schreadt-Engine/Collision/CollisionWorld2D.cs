@@ -13,11 +13,18 @@ public sealed class CollisionWorld2D
     private const double PositionCorrectionSlop = 0.005;
     private const double PositionCorrectionFraction = 0.8;
     private const double RestitutionVelocityThreshold = 1.0;
+    private const double JointPositionCorrectionFraction = 0.8;
+    private const double JointMaximumLinearCorrection = 0.2;
+    private const double JointMaximumAngularCorrection = 0.2;
+    private const double JointWakeDistance = 0.01;
+    private const double JointWakeSpeed = 0.25;
+    private const double JointLimitTolerance = 0.002;
 
     private readonly record struct ShapePair(Type First, Type Second);
 
     private readonly List<Collider2D> _colliders = [];
     private readonly HashSet<RigidBody2D> _bodies = [];
+    private readonly List<RevoluteJoint2D> _joints = [];
     private readonly Dictionary<ShapePair, INarrowPhaseRegistration> _narrowPhases = [];
     private Dictionary<ColliderPair, CollisionManifold> _activePairs = [];
     private Vector2D<double> _gravity = new(0.0, -9.81);
@@ -41,6 +48,8 @@ public sealed class CollisionWorld2D
 
     public IReadOnlyCollection<RigidBody2D> Bodies => _bodies;
 
+    public IReadOnlyList<RevoluteJoint2D> Joints => _joints;
+
     public CollisionDebugDraw2D DebugDraw { get; } = new();
 
     public CollisionStatistics2D Statistics => new(
@@ -53,7 +62,9 @@ public sealed class CollisionWorld2D
         _activePairs.Values.Sum(static manifold => manifold.ContactPointCount),
         PositionIterations,
         VelocityIterations,
-        _lastSolverMilliseconds);
+        _lastSolverMilliseconds,
+        _joints.Count,
+        _joints.Count(CanSolve));
 
     /// <summary>Number of deterministic penetration-correction passes performed per fixed step.</summary>
     public int PositionIterations
@@ -290,6 +301,33 @@ public sealed class CollisionWorld2D
         return results.Count;
     }
 
+    internal void AddBody(RigidBody2D body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (body.World is not null)
+            throw new InvalidOperationException("The rigid body already belongs to a collision world.");
+
+        body.World = this;
+        _bodies.Add(body);
+    }
+
+    internal bool RemoveBody(RigidBody2D body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (!ReferenceEquals(body.World, this) || !_bodies.Remove(body)) return false;
+
+        foreach (var joint in _joints
+                     .Where(candidate => ReferenceEquals(candidate.Body, body) ||
+                                         ReferenceEquals(candidate.ConnectedBody, body))
+                     .ToArray())
+        {
+            RemoveJoint(joint);
+        }
+
+        body.World = null;
+        return true;
+    }
+
     internal void AddCollider(Collider2D collider)
     {
         ArgumentNullException.ThrowIfNull(collider);
@@ -299,15 +337,13 @@ public sealed class CollisionWorld2D
             throw new InvalidOperationException("The collider already belongs to a collision world.");
         }
 
-        if (collider.Body.World is not null && !ReferenceEquals(collider.Body.World, this))
+        if (!ReferenceEquals(collider.Body.World, this))
         {
-            throw new InvalidOperationException("The collider's rigid body belongs to another collision world.");
+            throw new InvalidOperationException("The collider's rigid body does not belong to this collision world.");
         }
 
         collider.World = this;
-        collider.Body.World = this;
         _colliders.Add(collider);
-        _bodies.Add(collider.Body);
     }
 
     internal bool RemoveCollider(Collider2D collider)
@@ -324,12 +360,39 @@ public sealed class CollisionWorld2D
 
         collider.World = null;
 
-        if (!_colliders.Any(candidate => ReferenceEquals(candidate.Body, collider.Body)))
+        return true;
+    }
+
+    internal void AddJoint(RevoluteJoint2D joint)
+    {
+        ArgumentNullException.ThrowIfNull(joint);
+        if (joint.IsBroken)
+            throw new InvalidOperationException("Repair a broken revolute joint before registering it.");
+        if (joint.World is not null)
+            throw new InvalidOperationException("The revolute joint already belongs to a collision world.");
+        if (!ReferenceEquals(joint.Body.World, this))
+            throw new InvalidOperationException("The revolute joint's body does not belong to this collision world.");
+        if (joint.ConnectedBody is { } connectedBody && !ReferenceEquals(connectedBody.World, this))
         {
-            _bodies.Remove(collider.Body);
-            collider.Body.World = null;
+            throw new InvalidOperationException(
+                "Both bodies must belong to the same collision world before a revolute joint is registered.");
         }
 
+        joint.ReferenceAngle = joint.ConnectedBody is { } connected
+            ? connected.Owner.Transform.WorldRotation - joint.Body.Owner.Transform.WorldRotation
+            : joint.Body.Owner.Transform.WorldRotation;
+        joint.World = this;
+        _joints.Add(joint);
+        joint.Body.WakeUp();
+        joint.ConnectedBody?.WakeUp();
+    }
+
+    internal bool RemoveJoint(RevoluteJoint2D joint)
+    {
+        ArgumentNullException.ThrowIfNull(joint);
+        if (!ReferenceEquals(joint.World, this) || !_joints.Remove(joint)) return false;
+
+        joint.World = null;
         return true;
     }
 
@@ -374,24 +437,41 @@ public sealed class CollisionWorld2D
 
         var solverTimer = Stopwatch.StartNew();
         WakeSleepingBodiesForMeaningfulContacts(currentManifolds);
+        var activeJoints = _joints.Where(CanSolve).ToArray();
+        WakeSleepingBodiesForMeaningfulJoints(activeJoints);
         var positionIterationShare = 1.0 / PositionIterations;
         for (var iteration = 0; iteration < PositionIterations; iteration++)
         {
             foreach (var manifold in currentManifolds)
                 ResolvePosition(manifold, positionIterationShare);
+            foreach (var joint in activeJoints)
+                ResolveJointPosition(joint, positionIterationShare);
         }
 
         var velocityConstraints = currentManifolds
             .Select(CreateVelocityConstraint)
             .ToArray();
+        var jointConstraints = activeJoints
+            .Select(static joint => new RevoluteVelocityConstraint(joint))
+            .ToArray();
         for (var iteration = 0; iteration < VelocityIterations; iteration++)
         {
             foreach (var constraint in velocityConstraints)
                 ResolveVelocity(constraint);
+            foreach (var constraint in jointConstraints)
+                ResolveJointVelocity(constraint);
         }
+
+        var brokenJoints = jointConstraints
+            .Where(static constraint => constraint.ShouldBreak)
+            .Select(static constraint => constraint.Joint)
+            .ToArray();
+        foreach (var joint in brokenJoints) RemoveJoint(joint);
 
         solverTimer.Stop();
         _lastSolverMilliseconds = solverTimer.Elapsed.TotalMilliseconds;
+
+        foreach (var joint in brokenJoints) joint.MarkBroken();
 
         foreach (var pair in currentPairOrder)
         {
@@ -429,8 +509,14 @@ public sealed class CollisionWorld2D
             body.World = null;
         }
 
+        foreach (var joint in _joints)
+        {
+            joint.World = null;
+        }
+
         _colliders.Clear();
         _bodies.Clear();
+        _joints.Clear();
         _lastPairCheckCount = 0;
         _lastNarrowPhaseTestCount = 0;
         _lastSolverMilliseconds = 0.0;
@@ -439,13 +525,15 @@ public sealed class CollisionWorld2D
     internal void DrawDiagnostics(IRenderContext2D renderer)
     {
         ArgumentNullException.ThrowIfNull(renderer);
-        DebugDraw.Draw(renderer, _colliders);
+        DebugDraw.Draw(renderer, _colliders, _joints);
     }
 
     private bool CanCollide(Collider2D collider)
     {
         return ReferenceEquals(collider.World, this) && collider.Enabled && collider.Owner.ActiveInHierarchy;
     }
+
+    private bool CanSolve(RevoluteJoint2D joint) => joint.CanSolveIn(this);
 
     private bool CanQuery(Collider2D collider, CollisionQueryFilter2D filter)
     {
@@ -852,6 +940,197 @@ public sealed class CollisionWorld2D
         }
     }
 
+    private static void WakeSleepingBodiesForMeaningfulJoints(
+        IReadOnlyList<RevoluteJoint2D> joints)
+    {
+        foreach (var joint in joints)
+        {
+            var first = joint.Body;
+            var second = joint.ConnectedBody;
+            var firstSleeping = first.BodyType == CollisionBodyType2D.Dynamic && first.IsSleeping;
+            var secondSleeping = second?.BodyType == CollisionBodyType2D.Dynamic && second.IsSleeping;
+            if (!firstSleeping && secondSleeping != true) continue;
+
+            var separation = joint.SecondWorldAnchor - joint.FirstWorldAnchor;
+            var meaningfulSeparation = Dot(separation, separation) > JointWakeDistance * JointWakeDistance;
+            var firstAnchorVelocity = first.GetVelocityAtPoint(joint.FirstWorldAnchor);
+            var secondAnchorVelocity = second?.GetVelocityAtPoint(joint.SecondWorldAnchor) ?? Vector2D<double>.Zero;
+            var relativeVelocity = secondAnchorVelocity - firstAnchorVelocity;
+            var meaningfulVelocity = Dot(relativeVelocity, relativeVelocity) > JointWakeSpeed * JointWakeSpeed;
+            var connectedBodyAwake = second is not null &&
+                                     second.BodyType != CollisionBodyType2D.Static &&
+                                     !second.IsSleeping;
+            var firstBodyAwake = first.BodyType != CollisionBodyType2D.Static && !first.IsSleeping;
+            if (!meaningfulSeparation && !meaningfulVelocity && !connectedBodyAwake && !firstBodyAwake) continue;
+
+            if (firstSleeping) first.WakeUp();
+            if (secondSleeping == true) second!.WakeUp();
+        }
+    }
+
+    private static void ResolveJointPosition(RevoluteJoint2D joint, double iterationShare)
+    {
+        var first = joint.Body;
+        var second = joint.ConnectedBody;
+        var firstAnchor = joint.FirstWorldAnchor;
+        var secondAnchor = joint.SecondWorldAnchor;
+        var firstRadius = firstAnchor - first.Owner.Position;
+        var secondRadius = second is null
+            ? Vector2D<double>.Zero
+            : secondAnchor - second.Owner.Position;
+        var error = ClampLength(
+            secondAnchor - firstAnchor,
+            JointMaximumLinearCorrection);
+        var impulse = SolvePointConstraint(
+            first,
+            second,
+            firstRadius,
+            secondRadius,
+            error * (JointPositionCorrectionFraction * iterationShare));
+
+        first.ApplyPositionImpulseAtPoint(impulse, firstAnchor);
+        second?.ApplyPositionImpulseAtPoint(-impulse, secondAnchor);
+
+        if (!joint.LimitsEnabled) return;
+
+        var coordinate = GetJointAngle(joint);
+        var errorAngle = coordinate < joint.LowerAngle
+            ? coordinate - joint.LowerAngle
+            : coordinate > joint.UpperAngle
+                ? coordinate - joint.UpperAngle
+                : 0.0;
+        if (errorAngle == 0.0) return;
+
+        var inverseInertia = GetSolverInverseMomentOfInertia(first) +
+                             (second is null ? 0.0 : GetSolverInverseMomentOfInertia(second));
+        if (inverseInertia <= 0.0) return;
+
+        var correction = Math.Clamp(
+            errorAngle,
+            -JointMaximumAngularCorrection,
+            JointMaximumAngularCorrection);
+        var angularImpulse = -correction * JointPositionCorrectionFraction * iterationShare / inverseInertia;
+        ApplyJointAngularImpulse(first, second, angularImpulse, position: true);
+    }
+
+    private static void ResolveJointVelocity(RevoluteVelocityConstraint constraint)
+    {
+        if (constraint.ShouldBreak) return;
+
+        var joint = constraint.Joint;
+        var first = joint.Body;
+        var second = joint.ConnectedBody;
+        var firstAnchor = joint.FirstWorldAnchor;
+        var secondAnchor = joint.SecondWorldAnchor;
+        var firstRadius = firstAnchor - first.Owner.Position;
+        var secondRadius = second is null
+            ? Vector2D<double>.Zero
+            : secondAnchor - second.Owner.Position;
+        var relativeVelocity = (second?.GetVelocityAtPoint(secondAnchor) ?? Vector2D<double>.Zero) -
+                               first.GetVelocityAtPoint(firstAnchor);
+        var impulse = SolvePointConstraint(
+            first,
+            second,
+            firstRadius,
+            secondRadius,
+            relativeVelocity);
+
+        first.ApplyCollisionImpulseAtPoint(impulse, firstAnchor);
+        second?.ApplyCollisionImpulseAtPoint(-impulse, secondAnchor);
+        constraint.AccumulatedLinearImpulse += impulse;
+
+        if (joint.LimitsEnabled)
+        {
+            var coordinate = GetJointAngle(joint);
+            var angularVelocity = second is null
+                ? first.AngularVelocity
+                : second.AngularVelocity - first.AngularVelocity;
+            var atLowerLimit = coordinate <= joint.LowerAngle + JointLimitTolerance && angularVelocity < 0.0;
+            var atUpperLimit = coordinate >= joint.UpperAngle - JointLimitTolerance && angularVelocity > 0.0;
+            if (atLowerLimit || atUpperLimit)
+            {
+                var inverseInertia = GetSolverInverseMomentOfInertia(first) +
+                                     (second is null ? 0.0 : GetSolverInverseMomentOfInertia(second));
+                if (inverseInertia > 0.0)
+                {
+                    var angularImpulse = -angularVelocity / inverseInertia;
+                    ApplyJointAngularImpulse(first, second, angularImpulse, position: false);
+                    constraint.AccumulatedAngularImpulse += angularImpulse;
+                }
+            }
+        }
+
+        constraint.ShouldBreak =
+            Math.Max(
+                Math.Sqrt(Dot(constraint.AccumulatedLinearImpulse, constraint.AccumulatedLinearImpulse)),
+                Math.Abs(constraint.AccumulatedAngularImpulse)) > joint.BreakImpulseThreshold;
+    }
+
+    private static Vector2D<double> SolvePointConstraint(
+        RigidBody2D first,
+        RigidBody2D? second,
+        Vector2D<double> firstRadius,
+        Vector2D<double> secondRadius,
+        Vector2D<double> rightHandSide)
+    {
+        var firstInverseMass = GetSolverInverseMass(first);
+        var secondInverseMass = second is null ? 0.0 : GetSolverInverseMass(second);
+        var firstInverseInertia = GetSolverInverseMomentOfInertia(first);
+        var secondInverseInertia = second is null ? 0.0 : GetSolverInverseMomentOfInertia(second);
+        var inverseMass = firstInverseMass + secondInverseMass;
+        var k11 = inverseMass +
+                  firstRadius.Y * firstRadius.Y * firstInverseInertia +
+                  secondRadius.Y * secondRadius.Y * secondInverseInertia;
+        var k12 = -firstRadius.X * firstRadius.Y * firstInverseInertia -
+                  secondRadius.X * secondRadius.Y * secondInverseInertia;
+        var k22 = inverseMass +
+                  firstRadius.X * firstRadius.X * firstInverseInertia +
+                  secondRadius.X * secondRadius.X * secondInverseInertia;
+        var determinant = k11 * k22 - k12 * k12;
+        if (determinant <= 1e-12) return Vector2D<double>.Zero;
+
+        var inverseDeterminant = 1.0 / determinant;
+        return new Vector2D<double>(
+            (k22 * rightHandSide.X - k12 * rightHandSide.Y) * inverseDeterminant,
+            (-k12 * rightHandSide.X + k11 * rightHandSide.Y) * inverseDeterminant);
+    }
+
+    private static double GetJointAngle(RevoluteJoint2D joint) => joint.ConnectedBody is { } connected
+        ? connected.Owner.Transform.WorldRotation - joint.Body.Owner.Transform.WorldRotation - joint.ReferenceAngle
+        : joint.Body.Owner.Transform.WorldRotation - joint.ReferenceAngle;
+
+    private static void ApplyJointAngularImpulse(
+        RigidBody2D first,
+        RigidBody2D? second,
+        double impulse,
+        bool position)
+    {
+        if (second is null)
+        {
+            if (position) first.ApplyPositionAngularImpulse(impulse);
+            else first.ApplyCollisionAngularImpulse(impulse);
+            return;
+        }
+
+        if (position)
+        {
+            first.ApplyPositionAngularImpulse(-impulse);
+            second.ApplyPositionAngularImpulse(impulse);
+        }
+        else
+        {
+            first.ApplyCollisionAngularImpulse(-impulse);
+            second.ApplyCollisionAngularImpulse(impulse);
+        }
+    }
+
+    private static Vector2D<double> ClampLength(Vector2D<double> value, double maximumLength)
+    {
+        var lengthSquared = Dot(value, value);
+        if (lengthSquared <= maximumLength * maximumLength) return value;
+        return value * (maximumLength / Math.Sqrt(lengthSquared));
+    }
+
     private static VelocityConstraint CreateVelocityConstraint(CollisionManifold manifold)
     {
         var constraint = new VelocityConstraint(manifold);
@@ -1176,6 +1455,14 @@ public sealed class CollisionWorld2D
         internal CollisionManifold Manifold { get; } = manifold;
         internal ContactImpulseState FirstContact;
         internal ContactImpulseState SecondContact;
+    }
+
+    private sealed class RevoluteVelocityConstraint(RevoluteJoint2D joint)
+    {
+        internal RevoluteJoint2D Joint { get; } = joint;
+        internal Vector2D<double> AccumulatedLinearImpulse;
+        internal double AccumulatedAngularImpulse;
+        internal bool ShouldBreak;
     }
 
     private struct ContactImpulseState

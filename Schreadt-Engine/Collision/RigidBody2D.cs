@@ -33,6 +33,7 @@ public sealed class RigidBody2D : GameComponent
     private double _sleepAngularVelocityThreshold = 0.02;
     private double _timeToSleep = 0.5;
     private double _sleepTimer;
+    private readonly HashSet<RevoluteJoint2D> _joints = [];
 
     internal CollisionWorld2D? World { get; set; }
 
@@ -421,6 +422,14 @@ public sealed class RigidBody2D : GameComponent
         ClampAngularVelocity();
     }
 
+    internal void ApplyCollisionAngularImpulse(double impulse)
+    {
+        if (BodyType != CollisionBodyType2D.Dynamic || IsSleeping || FixedRotation) return;
+
+        _angularVelocity += impulse * InverseMomentOfInertia;
+        ClampAngularVelocity();
+    }
+
     internal Vector2D<double> GetVelocityAtPoint(Vector2D<double> worldPoint)
     {
         var radius = worldPoint - Owner.Position;
@@ -438,6 +447,14 @@ public sealed class RigidBody2D : GameComponent
         Owner.Move(impulse * InverseMass);
         if (angularCorrection != 0.0)
             Owner.Transform.SetWorldRotation(Owner.Transform.WorldRotation + angularCorrection);
+    }
+
+    internal void ApplyPositionAngularImpulse(double impulse)
+    {
+        if (BodyType != CollisionBodyType2D.Dynamic || IsSleeping || FixedRotation) return;
+
+        Owner.Transform.SetWorldRotation(
+            Owner.Transform.WorldRotation + impulse * InverseMomentOfInertia);
     }
 
     internal void EndPhysicsStep(double dt)
@@ -462,6 +479,10 @@ public sealed class RigidBody2D : GameComponent
         if (_sleepTimer >= TimeToSleep) Sleep();
     }
 
+    internal void AttachJoint(RevoluteJoint2D joint) => _joints.Add(joint);
+
+    internal void DetachJoint(RevoluteJoint2D joint) => _joints.Remove(joint);
+
     protected override void OnAttached()
     {
         if (Owner.GetComponent<RigidBody2D>() is not null)
@@ -472,6 +493,8 @@ public sealed class RigidBody2D : GameComponent
     {
         if (Owner.GetComponents<Collider2D>().Count > 0)
             throw new InvalidOperationException("Remove the game object's colliders before removing its rigid body.");
+        if (_joints.Count > 0)
+            throw new InvalidOperationException("Remove the rigid body's attached joints before removing its rigid body.");
     }
 
     private static void EnsureFinite(Vector2D<double> value, string parameterName)

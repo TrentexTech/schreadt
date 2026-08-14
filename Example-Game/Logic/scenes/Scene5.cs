@@ -18,7 +18,7 @@ internal sealed class Scene5 : PlatformerLevelLogic
 
     protected override Vector2D<double> SpawnPoint => new(0.0, -1.05);
 
-    protected override string HudNote => "PROVISIONAL: SLOPES, ROTATING BEAM, CRATE STACK";
+    protected override string HudNote => "PROVISIONAL: ROTATION, STACKS, REVOLUTE SEESAW";
 
     protected override void BuildLevel()
     {
@@ -46,7 +46,17 @@ internal sealed class Scene5 : PlatformerLevelLogic
             Position = new Vector2D<double>(9.55, 0.95)
         });
 
-        AddStableCrateStack(13.0, -1.31);
+        Scene.AddChild(new ProvisionalSeesaw(
+            new Vector2D<double>(2.5, 0.18),
+            new Vector2D<double>(11.9, -0.92))
+        {
+            Position = new Vector2D<double>(11.9, -0.92)
+        });
+        Scene.AddChild(new ProvisionalOrientedCrate(0.0)
+        {
+            Position = new Vector2D<double>(11.1, -0.28)
+        });
+        AddStableCrateStack(14.35, -1.31);
 
         AddStar(3.9, -0.35);
         AddStar(7.0, 0.65);
@@ -74,6 +84,46 @@ internal sealed class Scene5 : PlatformerLevelLogic
                 Position = new Vector2D<double>(x, bottomY + index * verticalSpacing)
             });
         }
+    }
+}
+
+internal sealed class ProvisionalSeesaw : Rectangle2D
+{
+    internal RigidBody2D Body { get; }
+    internal OrientedBoxCollider2D Collider { get; }
+    internal RevoluteJoint2D Joint { get; }
+
+    internal ProvisionalSeesaw(Vector2D<double> size, Vector2D<double> worldAnchor)
+    {
+        const double mass = 1.4;
+        Size = size;
+        Color = new Vector4D<float>(0.18f, 0.78f, 0.72f, 1.0f);
+        RenderLayer = 12;
+        Body = AddComponent(new RigidBody2D
+        {
+            BodyType = CollisionBodyType2D.Dynamic,
+            Mass = mass,
+            MomentOfInertia = PhysicsInertia2D.ForSolidBox(mass, size),
+            Friction = 0.85,
+            LinearDamping = 0.3,
+            AngularDamping = 0.8,
+            MaximumAngularSpeed = 4.0,
+            AllowSleep = false
+        });
+        Collider = AddComponent(new OrientedBoxCollider2D(size)
+        {
+            CollisionLayer = ExampleCollisionLayers.World,
+            CollisionMask = ExampleCollisionLayers.WorldMask
+        });
+        Joint = AddComponent(new RevoluteJoint2D(Vector2D<double>.Zero, worldAnchor));
+        Joint.SetLimits(-0.34, 0.34);
+
+        AddChild(new Circle
+        {
+            Radius = 0.09,
+            Color = new Vector4D<float>(1.0f, 0.72f, 0.16f, 1.0f),
+            RenderLayer = 13
+        });
     }
 }
 

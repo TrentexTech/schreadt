@@ -13,7 +13,9 @@ public readonly record struct CollisionStatistics2D(
     int ContactPointCount = 0,
     int PositionIterationCount = 1,
     int VelocityIterationCount = 1,
-    double SolverMilliseconds = 0.0);
+    double SolverMilliseconds = 0.0,
+    int RegisteredJointCount = 0,
+    int ActiveJointCount = 0);
 
 public sealed class CollisionDebugDraw2D
 {
@@ -22,6 +24,7 @@ public sealed class CollisionDebugDraw2D
     private Vector4D<float> _dynamicColor = new(1.0f, 0.75f, 0.15f, 0.24f);
     private Vector4D<float> _triggerColor = new(0.9f, 0.25f, 1.0f, 0.22f);
     private Vector4D<float> _disabledColor = new(0.55f, 0.55f, 0.6f, 0.14f);
+    private Vector4D<float> _jointColor = new(0.2f, 1.0f, 0.9f, 0.8f);
 
     public bool Enabled { get; set; }
 
@@ -57,7 +60,16 @@ public sealed class CollisionDebugDraw2D
         set => _disabledColor = ValidateColor(value, nameof(value));
     }
 
-    internal void Draw(IRenderContext2D renderer, IReadOnlyList<Collider2D> colliders)
+    public Vector4D<float> JointColor
+    {
+        get => _jointColor;
+        set => _jointColor = ValidateColor(value, nameof(value));
+    }
+
+    internal void Draw(
+        IRenderContext2D renderer,
+        IReadOnlyList<Collider2D> colliders,
+        IReadOnlyList<RevoluteJoint2D> joints)
     {
         if (!Enabled) return;
 
@@ -85,6 +97,46 @@ public sealed class CollisionDebugDraw2D
                     break;
             }
         }
+
+        for (var index = 0; index < joints.Count; index++)
+        {
+            var joint = joints[index];
+            if (!joint.Attached) continue;
+
+            var active = joint.Enabled &&
+                         !joint.IsBroken &&
+                         joint.Body.Owner.ActiveInHierarchy &&
+                         (joint.ConnectedBody?.Owner.ActiveInHierarchy ?? true);
+            if (!active && !ShowDisabled) continue;
+
+            var firstAnchor = joint.FirstWorldAnchor;
+            var secondAnchor = joint.SecondWorldAnchor;
+            var color = active ? JointColor : DisabledColor;
+            DrawJointLine(renderer, joint.Body.Owner.Position, firstAnchor, color);
+            if (joint.ConnectedBody is { } connected)
+                DrawJointLine(renderer, connected.Owner.Position, secondAnchor, color);
+            DrawJointLine(renderer, firstAnchor, secondAnchor, color);
+
+            renderer.DrawCircle(firstAnchor, 0.07, color);
+            renderer.DrawCircle(secondAnchor, 0.04, color);
+        }
+    }
+
+    private static void DrawJointLine(
+        IRenderContext2D renderer,
+        Vector2D<double> start,
+        Vector2D<double> end,
+        Vector4D<float> color)
+    {
+        var delta = end - start;
+        var length = Math.Sqrt(delta.X * delta.X + delta.Y * delta.Y);
+        if (length <= 1e-6) return;
+
+        renderer.DrawRectangle(
+            (start + end) * 0.5,
+            new Vector2D<double>(length, 0.025),
+            color,
+            Math.Atan2(delta.Y, delta.X));
     }
 
     private Vector4D<float> GetColor(Collider2D collider)
