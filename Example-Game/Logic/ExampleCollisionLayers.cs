@@ -10,6 +10,7 @@ internal static class ExampleCollisionLayers
     internal const int Goal = 3;
     internal const int Collectible = 4;
     internal const int Mechanic = 5;
+    internal const int Interactable = 6;
 
     internal static CollisionLayerMask2D PlayerMask { get; } =
         CollisionLayerMask2D.FromLayers(World, Hazard, Goal, Collectible, Mechanic);
@@ -21,4 +22,6 @@ internal static class ExampleCollisionLayers
         CollisionLayerMask2D.FromLayers(Player, World, Mechanic);
     internal static CollisionLayerMask2D MechanicOnlyMask { get; } =
         CollisionLayerMask2D.FromLayers(Mechanic);
+    internal static CollisionLayerMask2D InteractableOnlyMask { get; } =
+        CollisionLayerMask2D.FromLayers(Interactable);
 }

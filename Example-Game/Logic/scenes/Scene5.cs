@@ -41,20 +41,39 @@ internal sealed class Scene5 : PlatformerLevelLogic
         AddOrientedPlatform(10.35, -0.55, 3.0, 0.28, -0.28);
         AddPlatform(14.0, -1.85, 6.0, 0.6);
 
+        Scene.AddChild(new ProvisionalInspectableSign
+        {
+            Position = new Vector2D<double>(1.8, -1.18)
+        });
+
         Scene.AddChild(new ProvisionalOrientedCrate(0.35)
         {
             Position = new Vector2D<double>(9.55, 0.95)
         });
 
-        Scene.AddChild(new ProvisionalSeesaw(
+        var seesaw = new ProvisionalSeesaw(
             new Vector2D<double>(2.5, 0.18),
             new Vector2D<double>(11.9, -0.92))
         {
             Position = new Vector2D<double>(11.9, -0.92)
-        });
-        Scene.AddChild(new ProvisionalOrientedCrate(0.0)
+        };
+        Scene.AddChild(seesaw);
+        var seesawCrate = new ProvisionalOrientedCrate(0.0)
         {
             Position = new Vector2D<double>(11.1, -0.28)
+        };
+        Scene.AddChild(seesawCrate);
+        Scene.AddChild(new ProvisionalLever(() =>
+            seesaw.Body.AddImpulseAtPoint(
+                new Vector2D<double>(0.0, -1.0),
+                seesaw.Position + new Vector2D<double>(-1.0, 0.0)))
+        {
+            Position = new Vector2D<double>(10.65, -1.18)
+        });
+        Scene.AddChild(new ProvisionalResetStation(() =>
+            ResetSeesaw(seesaw, seesawCrate, new Vector2D<double>(11.1, -0.28)))
+        {
+            Position = new Vector2D<double>(13.0, -1.18)
         });
         AddStableCrateStack(14.35, -1.31);
 
@@ -85,6 +104,117 @@ internal sealed class Scene5 : PlatformerLevelLogic
             });
         }
     }
+
+    private static void ResetSeesaw(
+        ProvisionalSeesaw seesaw,
+        ProvisionalOrientedCrate crate,
+        Vector2D<double> cratePosition)
+    {
+        seesaw.Position = new Vector2D<double>(11.9, -0.92);
+        seesaw.RotationRadians = 0.0;
+        seesaw.Body.Velocity = Vector2D<double>.Zero;
+        seesaw.Body.AngularVelocity = 0.0;
+        seesaw.Body.ClearForces();
+
+        crate.Position = cratePosition;
+        crate.RotationRadians = 0.0;
+        crate.Body.Velocity = Vector2D<double>.Zero;
+        crate.Body.AngularVelocity = 0.0;
+        crate.Body.ClearForces();
+    }
+}
+
+internal abstract class ProvisionalInteractable : Rectangle2D, IInteractable2D
+{
+    internal CircleCollider2D InteractionCollider { get; }
+
+    protected ProvisionalInteractable(Vector2D<double> size, Vector4D<float> color)
+    {
+        Size = size;
+        Color = color;
+        RenderLayer = 24;
+        InteractionCollider = AddComponent(new CircleCollider2D(0.38)
+        {
+            IsTrigger = true,
+            CollisionLayer = ExampleCollisionLayers.Interactable,
+            CollisionMask = CollisionLayerMask2D.None
+        });
+    }
+
+    public abstract string InteractionPrompt { get; }
+
+    public abstract bool CanInteract(PlayerAvatar player);
+
+    public abstract void Interact(PlayerAvatar player);
+}
+
+internal sealed class ProvisionalLever : ProvisionalInteractable
+{
+    private readonly Action _activate;
+
+    internal bool Activated { get; private set; }
+
+    public override string InteractionPrompt => "E: PULL RELEASE LEVER";
+
+    internal ProvisionalLever(Action activate)
+        : base(new Vector2D<double>(0.18, 0.55), new Vector4D<float>(0.72f, 0.22f, 0.18f, 1.0f))
+    {
+        ArgumentNullException.ThrowIfNull(activate);
+        _activate = activate;
+    }
+
+    public override bool CanInteract(PlayerAvatar player) => !Activated;
+
+    public override void Interact(PlayerAvatar player)
+    {
+        if (!CanInteract(player)) return;
+        Activated = true;
+        RotationRadians = -0.45;
+        Color = new Vector4D<float>(0.3f, 0.88f, 0.48f, 1.0f);
+        _activate();
+    }
+}
+
+internal sealed class ProvisionalResetStation : ProvisionalInteractable
+{
+    private readonly Action _reset;
+
+    internal int ResetCount { get; private set; }
+
+    public override string InteractionPrompt => "E: RESET SEESAW";
+
+    internal ProvisionalResetStation(Action reset)
+        : base(new Vector2D<double>(0.34, 0.4), new Vector4D<float>(0.2f, 0.58f, 0.86f, 1.0f))
+    {
+        ArgumentNullException.ThrowIfNull(reset);
+        _reset = reset;
+    }
+
+    public override bool CanInteract(PlayerAvatar player) => true;
+
+    public override void Interact(PlayerAvatar player)
+    {
+        ResetCount++;
+        _reset();
+    }
+}
+
+internal sealed class ProvisionalInspectableSign : ProvisionalInteractable
+{
+    internal bool Inspected { get; private set; }
+
+    public override string InteractionPrompt => Inspected
+        ? "SEESAW: LOAD EITHER ARM"
+        : "E: READ FOUNDRY SIGN";
+
+    internal ProvisionalInspectableSign()
+        : base(new Vector2D<double>(0.52, 0.34), new Vector4D<float>(0.48f, 0.34f, 0.18f, 1.0f))
+    {
+    }
+
+    public override bool CanInteract(PlayerAvatar player) => true;
+
+    public override void Interact(PlayerAvatar player) => Inspected = true;
 }
 
 internal sealed class ProvisionalSeesaw : Rectangle2D

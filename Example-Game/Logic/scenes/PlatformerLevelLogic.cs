@@ -16,6 +16,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
     private readonly int _number;
     private readonly string? _nextScene;
     private PlatformerPlayerBehavior _playerBehavior = null!;
+    private PlayerInteractionBehavior _interactionBehavior = null!;
     private PlayerAvatar _player = null!;
     private GuiLabel _stats = null!;
     private int _stars;
@@ -40,8 +41,19 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         Scene.Collisions.Gravity = Gravity;
 
         _playerBehavior = new PlatformerPlayerBehavior(_input, SpawnPoint);
+        var interactionPrompt = Scene.Gui.AddPanel();
+        interactionPrompt.Position = new Vector2D<float>(470, 660);
+        interactionPrompt.Padding = 8;
+        interactionPrompt.BackgroundColor = new Vector4D<float>(0.035f, 0.055f, 0.11f, 0.92f);
+        var interactionPromptLabel = interactionPrompt.AddLabel(string.Empty);
+        interactionPromptLabel.Scale = 1.3f;
+        interactionPromptLabel.Color = new Vector4D<float>(1f, 0.84f, 0.28f, 1f);
+        _interactionBehavior = new PlayerInteractionBehavior(
+            _input,
+            interactionPrompt,
+            interactionPromptLabel);
         _playerBehavior.StatsChanged += UpdateStats;
-        _player = new PlayerAvatar(_playerBehavior)
+        _player = new PlayerAvatar(_playerBehavior, _interactionBehavior)
         {
             Position = SpawnPoint,
             RenderLayer = 30

@@ -38,6 +38,7 @@ public sealed class ExampleGameLogic : GameLogic
             InputBinding.ForKey(InputKey.D), InputBinding.ForKey(InputKey.Right));
         Input.SetActionBindings(ExampleInputActions.Jump,
             InputBinding.ForKey(InputKey.Space), InputBinding.ForKey(InputKey.W), InputBinding.ForKey(InputKey.Up));
+        Input.SetActionBindings(ExampleInputActions.Interact, InputBinding.ForKey(InputKey.E));
         Input.SetActionBindings(ExampleInputActions.Restart, InputBinding.ForKey(InputKey.R));
         Input.SetActionBindings(ExampleInputActions.Pause, InputBinding.ForKey(InputKey.P));
 
@@ -57,7 +58,7 @@ public sealed class ExampleGameLogic : GameLogic
         help.BackgroundColor = new Vector4D<float>(0.035f, 0.055f, 0.11f, 0.9f);
         var title = help.AddLabel("SKYBOUND");
         title.Color = new Vector4D<float>(1f, 0.86f, 0.26f, 1f);
-        help.AddLabel("A/D OR ARROWS: MOVE\nSPACE/W/UP: JUMP\nR: RESTART   P: PAUSE").Scale = 1.25f;
+        help.AddLabel("A/D OR ARROWS: MOVE\nSPACE/W/UP: JUMP   E: INTERACT\nR: RESTART   P: PAUSE").Scale = 1.25f;
         help.AddButton("PAUSE").Clicked += (_, _) => TogglePause();
         _levelSelector = new ExampleLevelSelector(Reality.Scenes, Context.Gui);
     }

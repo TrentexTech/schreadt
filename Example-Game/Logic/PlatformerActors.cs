@@ -119,7 +119,9 @@ internal sealed class PlayerAvatar : Actor
 {
     internal const double PlayerRadius = 0.23;
 
-    internal PlayerAvatar(PlatformerPlayerBehavior behavior)
+    internal PlayerAvatar(
+        PlatformerPlayerBehavior behavior,
+        PlayerInteractionBehavior? interactionBehavior = null)
     {
         AddComponent(new RigidBody2D
         {
@@ -138,6 +140,7 @@ internal sealed class PlayerAvatar : Actor
             CollisionMask = ExampleCollisionLayers.PlayerMask
         });
         AddComponent(behavior);
+        if (interactionBehavior is not null) AddComponent(interactionBehavior);
     }
 
     protected override void OnRender(IRenderContext2D renderer)
