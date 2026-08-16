@@ -14,7 +14,7 @@ public sealed class ExampleGameLogic : GameLogic
     internal const string LevelThree = "lunar-gardens";
     internal const string LevelFour = "clockwork-fortress";
     internal const string LevelFive = "tempest-spire";
-    internal const string LevelSix = "oriented-collider-lab";
+    internal const string LevelSix = "kinetic-foundry";
     internal const int LevelCount = 6;
     internal static SceneTransition LevelTransition { get; } = new FadeToColorSceneTransition(
         new Vector4D<float>(0.01f, 0.02f, 0.06f, 1.0f),

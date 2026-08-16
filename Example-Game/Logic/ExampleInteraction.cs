@@ -34,6 +34,8 @@ internal sealed class PlayerInteractionBehavior : ActorBehavior
 
     internal int FacingDirection => _facingDirection;
 
+    internal void ClearFocus() => ClearTarget();
+
     internal PlayerInteractionBehavior(
         IInputState input,
         GuiPanel promptPanel,

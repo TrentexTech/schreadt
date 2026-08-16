@@ -144,32 +144,32 @@ public sealed class ExampleInteractionTests
     }
 
     [Fact]
-    public void ProvisionalObjects_UseTheSharedContractWithoutReadingInput()
+    public void FoundryObjects_UseTheSharedContractWithoutReadingInput()
     {
         var input = new TestInputState();
         var player = new PlayerAvatar(new PlatformerPlayerBehavior(input, Vector2D<double>.Zero));
-        var leverActivations = 0;
+        var releases = 0;
         var resets = 0;
-        var lever = new ProvisionalLever(() => leverActivations++);
-        var station = new ProvisionalResetStation(() => resets++);
-        var sign = new ProvisionalInspectableSign();
+        var latch = new FoundryLatch(() => releases++);
+        var station = new FoundryResetStation("TEST RIG", () => resets++);
+        var ignition = new FoundryIgnitionLever(() => false, () => throw new Xunit.Sdk.XunitException("Must not ignite"));
 
-        Assert.IsAssignableFrom<IInteractable2D>(lever);
+        Assert.IsAssignableFrom<IInteractable2D>(latch);
         Assert.IsAssignableFrom<IInteractable2D>(station);
-        Assert.IsAssignableFrom<IInteractable2D>(sign);
+        Assert.IsAssignableFrom<IInteractable2D>(ignition);
 
-        lever.Interact(player);
-        lever.Interact(player);
+        latch.Interact(player);
+        latch.Interact(player);
         station.Interact(player);
         station.Interact(player);
-        sign.Interact(player);
+        ignition.Interact(player);
 
-        Assert.True(lever.Activated);
-        Assert.Equal(1, leverActivations);
+        Assert.True(latch.Released);
+        Assert.Equal(1, releases);
         Assert.Equal(2, station.ResetCount);
         Assert.Equal(2, resets);
-        Assert.True(sign.Inspected);
-        Assert.Equal("SEESAW: LOAD EITHER ARM", sign.InteractionPrompt);
+        Assert.True(ignition.Rejected);
+        Assert.Equal("BLOCK THE SENSOR WITH THE CRATE", ignition.InteractionPrompt);
     }
 
     private static InteractionFixture CreateFixture()

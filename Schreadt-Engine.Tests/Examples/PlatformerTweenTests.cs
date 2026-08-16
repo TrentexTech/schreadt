@@ -277,66 +277,9 @@ public sealed class PlatformerTweenTests
     }
 
     [Fact]
-    public void ProvisionalRotatingBeam_UpdatesCollisionAndRenderingInFixedStep()
+    public void FoundryCrate_UsesDynamicBodyAndMatchingCollider()
     {
-        var scene = new Scene("oriented-beam-test", new EmptySceneLogic());
-        var beam = new ProvisionalRotatingBeam(
-            new Vector2D<double>(2.0, 0.2),
-            minimumRotation: -Math.PI / 2.0,
-            maximumRotation: Math.PI / 2.0,
-            cycleDuration: 4.0);
-        var probe = new Circle { Position = new Vector2D<double>(0.0, 0.8), Radius = 0.15 };
-        var probeCollider = probe.AddComponent(new CircleCollider2D(probe.Radius));
-        var entered = false;
-        beam.Collider.CollisionEntered += contact =>
-        {
-            if (ReferenceEquals(contact.Other, probeCollider)) entered = true;
-        };
-        scene.AddChild(beam);
-        scene.AddChild(probe);
-        scene.Init();
-
-        scene.Collisions.Step(0.0);
-        Assert.False(entered);
-
-        beam.FixedUpdate(1.0);
-        scene.Collisions.Step(1.0);
-
-        Assert.True(entered);
-        Assert.Equal(Math.PI / 2.0, beam.RotationRadians, 10);
-        Assert.Equal(beam.RotationRadians, beam.Collider.WorldRotation, 10);
-        var renderer = new RotationRecordingRenderContext();
-        beam.Render(renderer);
-        var draw = Assert.Single(renderer.Rectangles);
-        Assert.Equal(beam.RotationRadians, draw.Rotation, 10);
-        Assert.Equal(beam.Size, draw.Size);
-    }
-
-    [Fact]
-    public void ProvisionalOrientedPlatform_UsesHierarchyForItsRotatedSurfaceStripe()
-    {
-        var platform = new ProvisionalOrientedPlatform(
-            new Vector2D<double>(2.0, 0.3),
-            Math.PI / 4.0)
-        {
-            Position = new Vector2D<double>(2.0, 3.0)
-        };
-        platform.Init();
-        var stripe = Assert.IsType<Rectangle2D>(Assert.Single(platform.Children));
-
-        Assert.Equal(platform.RotationRadians, platform.Collider.WorldRotation, 10);
-        Assert.Equal(platform.RotationRadians, stripe.RotationRadians, 10);
-        var expectedStripePosition = platform.Position + Transform2D.Rotate(
-            stripe.Transform.LocalPosition,
-            platform.RotationRadians);
-        Assert.Equal(expectedStripePosition.X, stripe.Position.X, 10);
-        Assert.Equal(expectedStripePosition.Y, stripe.Position.Y, 10);
-    }
-
-    [Fact]
-    public void ProvisionalOrientedCrate_UsesDynamicBodyAndMatchingCollider()
-    {
-        var crate = new ProvisionalOrientedCrate(0.35);
+        var crate = CreateFoundryCrate(0.35);
 
         Assert.Equal(CollisionBodyType2D.Dynamic, crate.Body.BodyType);
         Assert.Equal(crate.Size, crate.Collider.Size);
@@ -346,9 +289,9 @@ public sealed class PlatformerTweenTests
     }
 
     [Fact]
-    public void ProvisionalOrientedCrate_RotatesAfterOffCenterImpulse()
+    public void FoundryCrate_RotatesAfterOffCenterImpulse()
     {
-        var crate = new ProvisionalOrientedCrate(0.35);
+        var crate = CreateFoundryCrate(0.35);
         var scene = new Scene("oriented-crate-angular-test", new EmptySceneLogic());
         scene.Collisions.Gravity = Vector2D<double>.Zero;
         scene.AddChild(crate);
@@ -365,12 +308,12 @@ public sealed class PlatformerTweenTests
     }
 
     [Fact]
-    public void Player_CanJumpFromProvisionalOrientedCrate()
+    public void Player_CanJumpFromFoundryCrate()
     {
         var input = new TestInputState { JumpDown = true };
         var behavior = new PlatformerPlayerBehavior(input, Vector2D<double>.Zero);
         var player = new PlayerAvatar(behavior);
-        var crate = new ProvisionalOrientedCrate(0.35);
+        var crate = CreateFoundryCrate(0.35);
         player.Position = crate.Position + crate.Collider.AxisY *
             (crate.Collider.HalfSize.Y + PlayerAvatar.PlayerRadius - 0.01);
         var scene = new Scene("oriented-crate-jump-test", new EmptySceneLogic());
@@ -384,6 +327,13 @@ public sealed class PlatformerTweenTests
 
         Assert.Equal(5.35, player.GetComponent<RigidBody2D>()!.Velocity.Y, 10);
     }
+
+    private static FoundryCrate CreateFoundryCrate(double rotation) => new(
+        Vector2D<double>.Zero,
+        0.8,
+        0.7,
+        new Vector4D<float>(0.86f, 0.52f, 0.16f, 1.0f),
+        rotation: rotation);
 
     private sealed class TestActor : Actor;
 

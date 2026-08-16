@@ -33,6 +33,11 @@ internal abstract class PlatformerLevelLogic : SceneLogic
     protected abstract Vector2D<double> SpawnPoint { get; }
     protected virtual Vector2D<double> Gravity => new(0, -11.5);
     protected virtual string? HudNote => null;
+    protected virtual CameraBounds2D CameraBounds => new(
+        new Vector2D<double>(-1, -2.8),
+        new Vector2D<double>(17, 3.4));
+    protected PlayerAvatar Player => _player;
+    protected PlayerInteractionBehavior PlayerInteraction => _interactionBehavior;
     protected abstract void BuildLevel();
 
     public override void Init()
@@ -306,10 +311,10 @@ internal abstract class PlatformerLevelLogic : SceneLogic
         Scene.AddChild(enemy);
     }
 
-    protected void AddBoundaryWalls()
+    protected void AddBoundaryWalls(double rightX = 17.2)
     {
         AddInvisibleWall(-1.2, 0, 0.3, 7);
-        AddInvisibleWall(17.2, 0, 0.3, 7);
+        AddInvisibleWall(rightX, 0, 0.3, 7);
     }
 
     private void AddInvisibleWall(double x, double y, double width, double height)
@@ -358,7 +363,7 @@ internal abstract class PlatformerLevelLogic : SceneLogic
             TargetOffset = new Vector2D<double>(0.7, 0.35),
             SmoothTime = 0.16,
             DeadZone = new Vector2D<double>(0.65, 0.35),
-            WorldBounds = new CameraBounds2D(new Vector2D<double>(-1, -2.8), new Vector2D<double>(17, 3.4))
+            WorldBounds = CameraBounds
         });
     }
 }

@@ -8,11 +8,11 @@ namespace Schreadt_Engine.Tests.Examples;
 public sealed class PhysicsShowcaseTests
 {
     [Fact]
-    public void ProvisionalSeesaw_UsesLimitedRegisteredJointAndRespondsToOffCenterLoad()
+    public void FoundrySeesaw_UsesLimitedRegisteredJointAndRespondsToOffCenterLoad()
     {
         var scene = new Scene("physics-showcase", new EmptySceneLogic());
         scene.Collisions.Gravity = Vector2D<double>.Zero;
-        var seesaw = new ProvisionalSeesaw(
+        var seesaw = new FoundrySeesaw(
             new Vector2D<double>(2.5, 0.18),
             Vector2D<double>.Zero);
         scene.AddChild(seesaw);
